@@ -1,0 +1,37 @@
+GENERATOR:
+  PackageName: types
+  PackageDescription: "WINC Network Controller Driver"
+#  SysIncludes:
+#    - stdint.h
+#    - stddef.h
+  Includes:
+      - ../include/m2m_types.h
+      - ../include/socket.h
+      - ../include/m2m_socket_host_if.h
+      - ../include/m2m_hif.h
+PARSER:
+  IncludePaths: ["/usr/include", "/usr/local/include"]
+  SourcesPaths:
+    - m2m_types.h
+    - socket.h
+    - m2m_socket_host_if.h
+    - m2m_hif.h
+TRANSLATOR:
+  ConstRules:
+    defines: eval
+    enum: cgo
+  Rules:
+    const:
+      - {action: accept, from: "^M2M"}
+      - {action: accept, from: "^SO_"}
+      - {action: accept, from: "^SOL_"}
+      - {action: accept, from: "^SSL_"}
+      - {action: accept, from: "^IP_"}
+      #- {action: replace, from: "^M2M", to: _}
+      - {transform: export}
+    type:
+      - {action: accept, from: "^tstr" }
+      - {action: replace, from: "^tstr"}
+      - {transform: export}
+    private:
+      - { transform: export }
