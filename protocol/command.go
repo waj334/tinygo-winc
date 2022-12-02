@@ -155,10 +155,8 @@ func (cmd *commandPacket) write(t *transport) (err error) {
 	defer t.cs.High()
 
 	// Write the data payload
-	for _, b := range cmd.data[:cmd.length] {
-		if _, err = t.Transfer(b); err != nil {
-			return err
-		}
+	if _, err = t.Write(cmd.data[:cmd.length]); err != nil {
+		return
 	}
 
 	// Write the CRC byte if enabled

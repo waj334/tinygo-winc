@@ -24,35 +24,40 @@ SOFTWARE.
 
 package winc
 
-import "C"
 import (
+	"net"
 	"sync"
 	"time"
-	"unsafe"
-
-	"github.com/smallnest/ringbuffer"
 
 	"github.com/waj334/tinygo-winc/protocol"
 	"github.com/waj334/tinygo-winc/protocol/types"
 )
 
 type (
-	Socket       int8
 	SocketType   uint8
 	SocketConfig uint8
-	socketStr    struct {
-		buffer         *ringbuffer.RingBuffer
-		offset         uint16
-		sessionId      uint16
-		inUse          bool
-		sslFlags       uint8
-		receivePending bool
-		alpnStatus     uint8
-		errSource      uint8
-		errCode        uint8
-		mutex          sync.Mutex
-		callbackChan   chan any
-		acceptChan     chan types.AcceptReply
+
+	Socket struct {
+		sockfd          int8
+		connectedSockfd int8
+
+		offset    uint16
+		sessionId uint16
+		sslFlags  uint8
+
+		driver *WINC
+		mutex  sync.Mutex
+
+		acceptChan chan int8
+
+		bufferAddr uint32
+		bufferLen  int
+
+		callbackChan SyncMap[uint16, chan<- any]
+		recvDeadline time.Time
+		sendDeadline time.Time
+
+		addr net.Addr
 	}
 
 	Sockaddr struct {
@@ -160,107 +165,35 @@ const (
 	afInet uint16 = 2
 )
 
-const (
-	SocketInvalid Socket = -1
-)
-
-var (
-	hostnameChan = make(chan types.DnsReply, 1)
-
-	sockets [maxSocket]socketStr
-
-	sessionCounterMutex sync.Mutex
-	sessionCounter      uint16 = 1
-)
-
-func (w *WINC) Socket(sockType SocketType, config SocketConfig) (socket Socket, err error) {
-	socket = SocketInvalid
-
-	if sockType == SocketTypeStream {
-		// Find available TCP socket
-		for i := 0; i < maxTcpSocket; i++ {
-			if !sockets[i].inUse {
-				socket = Socket(i)
-				break
-			}
-		}
-	} else if sockType == SocketTypeDatagram {
-		// Find available UDP socket
-		for i := maxTcpSocket; i < maxSocket; i++ {
-			if !sockets[i].inUse {
-				socket = Socket(i)
-				break
-			}
-		}
+func (s *Socket) Listen(backlog int) (err error) {
+	if s.sockfd < 0 {
+		return ErrSocketInvalid
 	}
 
-	if socket >= 0 {
-		println("Creating socket", socket, "/(", maxTcpSocket, ",", maxSocket, ")")
-		sockets[socket] = socketStr{
-			buffer: ringbuffer.New(2048),
-		}
-
-		sockets[socket].mutex.Lock()
-		defer sockets[socket].mutex.Unlock()
-
-		if sockType == SocketTypeStream && config != SocketConfigSslOff {
-			// Create TLS enabled socket
-			strSSLCreate := types.SSLSocketCreateCmd{
-				SslSock: int8(socket),
-			}
-
-			if err = hif.Send(GroupWIFI, OpcodeSocketSslCreate, strSSLCreate.Bytes(), nil, 0); err != nil {
-				return SocketInvalid, err
-			}
-
-			// Set TLS flags
-			sockets[socket].sslFlags = sslFlagsActive | sslFlagsNoTxCopy
-			if config == SocketConfigSslDelay {
-				sockets[socket].sslFlags |= sslFlagsDelay
-			}
-		}
-
-		sockets[socket].inUse = true
-		sockets[socket].callbackChan = make(chan interface{}, 1)
-
-		// Get unique session id
-		sessionCounterMutex.Lock()
-		sockets[socket].sessionId = sessionCounter
-		sessionCounter++
-		sessionCounterMutex.Unlock()
-	} else {
-		err = ErrNoAvailableSocket
-	}
-
-	return
-}
-
-func (w *WINC) Accept(socket Socket, addr Sockaddr) (err error) {
-	return ErrSocketFuncNotImplemented
-}
-
-func (w *WINC) Listen(socket Socket, backlog int) (err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
-
-	if socket < 0 || socket > maxSocket || !sockets[socket].inUse {
-		return ErrSocketInvalidArg
-	}
+	// Get unique session id
 
 	strListen := types.ListenCmd{
-		Sock:         int8(socket),
+		Sock:         s.sockfd,
 		U8BackLog:    uint8(backlog),
-		U16SessionID: sockets[socket].sessionId,
+		U16SessionID: s.driver.getSessionId(),
 	}
 
-	if err = hif.Send(GroupIP, OpcodeSocketListen, strListen.Bytes(), nil, 0); err != nil {
+	// Create a channel to receive the reply on
+	replyChan := make(chan any, 1)
+	s.callbackChan.Store(strListen.U16SessionID, replyChan)
+	defer close(replyChan)
+
+	// Send the request to the device
+	if err = s.driver.hif.Send(GroupIP, OpcodeSocketListen, strListen.Bytes(), nil, 0); err != nil {
 		return
 	}
+
+	s.mutex.Lock()
 
 	// Wait for WINC to accept the incoming connection
 	var strListenReply types.ListenReply
 	select {
-	case reply := <-sockets[socket].callbackChan:
+	case reply := <-replyChan:
 		strListenReply = reply.(types.ListenReply)
 	}
 
@@ -272,138 +205,181 @@ func (w *WINC) Listen(socket Socket, backlog int) (err error) {
 	return
 }
 
-func (w *WINC) Bind(socket Socket, addr Sockaddr) (err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
-
-	if socket < 0 || socket > maxSocket || !sockets[socket].inUse {
-		return ErrSocketInvalidArg
+func (s *Socket) Bind(addr net.Addr) (err error) {
+	if s.sockfd < 0 {
+		return ErrSocketInvalid
 	}
 
 	strBind := types.BindCmd{
 		StrAddr: types.SockAddr{
 			U16Family: afInet,
-			U16Port:   addr.Port,
-			U32IPAddr: addr.Address,
 		},
-		Sock:         int8(socket),
-		U16SessionID: sockets[socket].sessionId,
+		Sock:         s.sockfd,
+		U16SessionID: s.driver.getSessionId(),
+	}
+
+	// addr can be TCPAddr or UDPAddr
+	switch actualAddr := addr.(type) {
+	case *TCPAddr:
+		strBind.StrAddr.U32IPAddr = actualAddr.U32IPAddr
+		strBind.StrAddr.U16Port = Htons(actualAddr.U16Port)
+	case *UDPAddr:
+		strBind.StrAddr.U32IPAddr = actualAddr.U32IPAddr
+		strBind.StrAddr.U16Port = Htons(actualAddr.U16Port)
+	default:
+		return ErrInvalidParameter
 	}
 
 	cmd := OpcodeSocketBind
-	if sockets[socket].sslFlags&sslFlagsActive != 0 {
+	if s.sslFlags&sslFlagsActive != 0 {
 		cmd = OpcodeSocketSslBind
 	}
 
-	if err = hif.Send(GroupIP, cmd, strBind.Bytes(), nil, 0); err != nil {
+	// Create a channel to receive the reply on
+	replyChan := make(chan any, 1)
+	s.callbackChan.Store(strBind.U16SessionID, replyChan)
+	defer close(replyChan)
+
+	if err = s.driver.hif.Send(GroupIP, cmd, strBind.Bytes(), nil, 0); err != nil {
 		return
 	}
 
-	return
-}
-
-func (w *WINC) Connect(socket Socket, addr Sockaddr) (err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
-
-	if sockets[socket].inUse {
-		strConnect := types.ConnectCmd{
-			StrAddr: types.SockAddr{
-				U16Family: afInet,
-				U16Port:   addr.Port,
-				U32IPAddr: addr.Address,
-			},
-			Sock:         int8(socket),
-			U16SessionID: sockets[socket].sessionId,
-		}
-
-		cmd := OpcodeSocketConnect
-		if sockets[socket].sslFlags&sslFlagsActive != 0 {
-			cmd = OpcodeSocketSslConnect
-			strConnect.U8SslFlags = sockets[socket].sslFlags
-		}
-
-		if err = hif.Send(GroupIP, cmd, strConnect.Bytes(), nil, 0); err != nil {
-			return
-		}
-
-		var strConnectReply types.ConnectReply
-
-		// Wait for the response
-		select {
-		case reply := <-sockets[socket].callbackChan:
-			strConnectReply = reply.(types.ConnectReply)
-		}
-
-		if strConnectReply.S8Error != 0 {
-			return SocketError(strConnectReply.S8Error)
-		}
-
-		// NOTE: Extra data is the u16AppDataOffset member of the union in the original tstrConnectReply struct
-		sockets[socket].offset = strConnectReply.U16ExtraData - protocol.M2M_HIF_HDR_OFFSET
-
-	} else {
-		err = ErrSocketDoesNotExist
+	var strBindReply types.BindReply
+	select {
+	case reply := <-replyChan:
+		strBindReply = reply.(types.BindReply)
 	}
 
+	if strBindReply.S8Status < 0 {
+		// Return the error
+		return SocketError(strBindReply.S8Status)
+	}
+
+	s.addr = addr
+
 	return
 }
 
-func (w *WINC) Shutdown(socket Socket) (err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
+func (s *Socket) Connect(addr net.Addr) (err error) {
+	if s.sockfd < 0 {
+		return ErrSocketInvalid
+	}
 
-	if sockets[socket].inUse {
-		return ErrSocketDoesNotExist
+	strConnect := types.ConnectCmd{
+		StrAddr: types.SockAddr{
+			U16Family: afInet,
+		},
+		Sock: s.sockfd,
+
+		// Using the sessionId of the socket since the connect reply does not return this session id
+		U16SessionID: s.sessionId,
+	}
+
+	// addr can be TCPAddr or UDPAddr
+	switch actualAddr := addr.(type) {
+	case *TCPAddr:
+		strConnect.StrAddr.U32IPAddr = actualAddr.U32IPAddr
+		strConnect.StrAddr.U16Port = Htons(actualAddr.U16Port)
+	case *UDPAddr:
+		strConnect.StrAddr.U32IPAddr = actualAddr.U32IPAddr
+		strConnect.StrAddr.U16Port = Htons(actualAddr.U16Port)
+	default:
+		return ErrInvalidParameter
+	}
+
+	cmd := OpcodeSocketConnect
+	if s.sslFlags&sslFlagsActive != 0 {
+		cmd = OpcodeSocketSslConnect
+		strConnect.U8SslFlags = s.sslFlags
+	}
+
+	// Create a channel to receive the reply on
+	replyChan := make(chan any, 1)
+	s.callbackChan.Store(strConnect.U16SessionID, replyChan)
+	defer close(replyChan)
+
+	if err = s.driver.hif.Send(GroupIP, cmd, strConnect.Bytes(), nil, 0); err != nil {
+		return
+	}
+
+	var strConnectReply types.ConnectReply
+
+	// Wait for the response
+	select {
+	case reply := <-replyChan:
+		strConnectReply = reply.(types.ConnectReply)
+	}
+
+	if strConnectReply.S8Error != 0 {
+		return SocketError(strConnectReply.S8Error)
+	}
+
+	// NOTE: Extra data is the u16AppDataOffset member of the union in the original tstrConnectReply struct
+	s.offset = strConnectReply.U16ExtraData - protocol.M2M_HIF_HDR_OFFSET
+
+	// Keep the address of the remote connection
+	s.addr = addr
+
+	return
+}
+
+func (s *Socket) Shutdown() (err error) {
+	if s.sockfd < 0 {
+		return ErrSocketInvalid
 	}
 
 	cmd := OpcodeSocketClose
-	if sockets[socket].sslFlags&sslFlagsActive != 0 {
+	if s.sslFlags&sslFlagsActive != 0 {
 		cmd = OpcodeSocketSslClose
 	}
 
 	strClose := types.CloseCmd{
-		Sock:         int8(socket),
-		U16SessionID: sockets[socket].sessionId,
+		Sock:         s.sockfd,
+		U16SessionID: s.sessionId,
 	}
 
-	if err = hif.Send(GroupIP, cmd, strClose.Bytes(), nil, 0); err != nil {
+	if err = s.driver.hif.Send(GroupIP, cmd, strClose.Bytes(), nil, 0); err != nil {
 		return
 	}
 
+	// Garbage collect later
+	s.driver.sockets[s.sockfd] = nil
+
+	// Invalidate the socket so no further request can be made
+	s.sockfd = -1
 	return
 }
 
-func (w *WINC) Secure(socket Socket) (err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
-
-	if socket < 0 || socket >= maxSocket {
-		return ErrSocketInvalidArg
-	} else if !sockets[socket].inUse {
+func (s *Socket) Secure() (err error) {
+	if s.sockfd < 0 {
 		return ErrSocketInvalid
 	}
 
-	flags := sockets[socket].sslFlags
-	if flags&sslFlagsDelay == 0 || flags&sslFlagsActive == 0 || sockets[socket].offset == 0 {
+	flags := s.sslFlags
+	if flags&sslFlagsDelay == 0 || flags&sslFlagsActive == 0 || s.offset == 0 {
 		return ErrSocketInvalidArg
 	}
 
-	sockets[socket].sslFlags &= sslFlagsDelay
+	s.sslFlags &= sslFlagsDelay
 	strConnect := types.ConnectCmd{
-		Sock:         int8(socket),
-		U8SslFlags:   sockets[socket].sslFlags,
-		U16SessionID: sockets[socket].sessionId,
+		Sock:         s.sockfd,
+		U8SslFlags:   s.sslFlags,
+		U16SessionID: s.driver.getSessionId(),
 	}
 
-	if err = hif.Send(GroupIP, OpcodeSocketSecure, strConnect.Bytes(), nil, 0); err != nil {
+	// Create a channel to receive the reply on
+	replyChan := make(chan any, 1)
+	s.callbackChan.Store(strConnect.U16SessionID, replyChan)
+	defer close(replyChan)
+
+	if err = s.driver.hif.Send(GroupIP, OpcodeSocketSecure, strConnect.Bytes(), nil, 0); err != nil {
 		return
 	}
 
 	// Wait for the response
 	var strConnectReply types.ConnectReply
 	select {
-	case reply := <-sockets[socket].callbackChan:
+	case reply := <-replyChan:
 		strConnectReply = reply.(types.ConnectReply)
 	}
 
@@ -412,18 +388,13 @@ func (w *WINC) Secure(socket Socket) (err error) {
 	}
 
 	// NOTE: Extra data is the u16AppDataOffset member of the union in the original tstrConnectReply struct
-	sockets[socket].offset = strConnectReply.U16ExtraData - protocol.M2M_HIF_HDR_OFFSET
+	s.offset = strConnectReply.U16ExtraData - protocol.M2M_HIF_HDR_OFFSET
 
 	return
 }
 
-func (w *WINC) Setsockopt(socket Socket, level, name int, value []byte) (err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
-
-	if socket < 0 || socket >= maxSocket {
-		return ErrSocketInvalidArg
-	} else if !sockets[socket].inUse {
+func (s *Socket) Setsockopt(level, name int, value []byte) (err error) {
+	if s.sockfd < 0 {
 		return ErrSocketInvalid
 	}
 
@@ -446,85 +417,90 @@ func (w *WINC) Setsockopt(socket Socket, level, name int, value []byte) (err err
 		if sslFlag != 0 {
 			optVal := protocol.ToUint32(value)
 			if optVal != 0 {
-				sockets[socket].sslFlags |= uint8(optVal)
+				s.sslFlags |= uint8(optVal)
 			} else {
-				sockets[socket].sslFlags &= ^uint8(optVal)
+				s.sslFlags &= ^uint8(optVal)
 			}
 			return
 		} else if ((name == types.SO_SSL_SNI) && (len(value) < 64)) || ((name == types.SO_SSL_ALPN) && (len(value) <= 32)) {
 			strSslSetSockOpt := types.SSLSetSockOptCmd{
-				Sock:         int8(socket),
+				Sock:         s.sockfd,
 				U8Option:     uint8(name),
-				U16SessionID: sockets[socket].sessionId,
+				U16SessionID: s.sessionId,
 			}
 
 			copy(strSslSetSockOpt.Au8OptVal[:], value)
-
-			ref, _ := strSslSetSockOpt.PassRef()
-			control = C.GoBytes(unsafe.Pointer(ref), C.int(unsafe.Sizeof(*ref)))
+			control = strSslSetSockOpt.Bytes()
 		} else {
 			return ErrSocketInvalidArg
 		}
 	} else if level == SolSocket && len(value) == 4 {
 		strSetSockOpt := types.SetSocketOptCmd{
 			U32OptionValue: protocol.ToUint32(value),
-			Sock:           int8(socket),
+			Sock:           s.sockfd,
 			U8Option:       uint8(name),
-			U16SessionID:   sockets[socket].sessionId,
+			U16SessionID:   s.sessionId,
 		}
 
-		ref, _ := strSetSockOpt.PassRef()
-		control = C.GoBytes(unsafe.Pointer(ref), C.int(unsafe.Sizeof(*ref)))
+		control = strSetSockOpt.Bytes()
 	}
 
-	if err = hif.Send(GroupIP, cmd|protocol.OpcodeReqDataPkt, control, nil, 0); err != nil {
+	if err = s.driver.hif.Send(GroupIP, cmd|protocol.OpcodeReqDataPkt, control, nil, 0); err != nil {
 		return ErrSocketInvalid
 	}
 
 	return
 }
 
-func (w *WINC) Send(socket Socket, buf []byte) (sz int, err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
-
-	if socket < 0 || socket >= maxSocket {
-		return 0, ErrSocketInvalidArg
-	} else if !sockets[socket].inUse {
+func (s *Socket) Send(buf []byte, deadline time.Time) (sz int, err error) {
+	if s.sockfd < 0 {
 		return 0, ErrSocketInvalid
 	}
 
 	cmd := OpcodeSocketSend
 	offset := tcpTxPacketOffset
 
-	if socket >= maxTcpSocket {
+	if s.sockfd >= maxTcpSocket {
 		offset = udpTxPacketOffset
 	}
 
-	if sockets[socket].sslFlags&uint8(sslFlagsActive) != 0 && sockets[socket].sslFlags&uint8(sslFlagsDelay) == 0 {
+	if s.sslFlags&sslFlagsActive != 0 && s.sslFlags&sslFlagsDelay == 0 {
 		cmd = OpcodeSocketSslSend
-		offset = sockets[socket].offset
+		offset = s.offset
 	}
 
 	strSend := types.SendCmd{
-		Sock:         int8(socket),
+		Sock:         s.sockfd,
 		U16DataSize:  uint16(len(buf)),
-		U16SessionID: sockets[socket].sessionId,
+		U16SessionID: s.driver.getSessionId(),
 	}
 
-	if err = hif.Send(GroupIP, cmd|protocol.OpcodeReqDataPkt, strSend.Bytes(), buf, offset); err != nil {
+	// Create a channel to receive the reply on
+	replyChan := make(chan any, 1)
+	s.callbackChan.Store(strSend.U16SessionID, replyChan)
+	defer close(replyChan)
+
+	if err = s.driver.hif.Send(GroupIP, cmd|protocol.OpcodeReqDataPkt, strSend.Bytes(), buf, offset); err != nil {
+		s.callbackChan.Delete(strSend.U16SessionID)
 		return 0, ErrSocketBufferFull
 	}
 
 	var strSendReply types.SendReply
-	timer := time.NewTimer(time.Second * 30)
 
 	// Wait for the response
-	select {
-	case reply := <-sockets[socket].callbackChan:
-		strSendReply = reply.(types.SendReply)
-	case <-timer.C:
-		return 0, ErrSocketTimeout
+	if s.sendDeadline.IsZero() {
+		select {
+		case reply := <-replyChan:
+			strSendReply = reply.(types.SendReply)
+		}
+	} else {
+		select {
+		case reply := <-replyChan:
+			strSendReply = reply.(types.SendReply)
+		case <-time.After(s.sendDeadline.Sub(time.Now())):
+			s.callbackChan.Delete(strSend.U16SessionID)
+			return 0, ErrSocketTimeout
+		}
 	}
 
 	// Check for error
@@ -536,40 +512,58 @@ func (w *WINC) Send(socket Socket, buf []byte) (sz int, err error) {
 	return
 }
 
-func (w *WINC) SendTo(socket Socket, buf []byte, addr Sockaddr) (sz int, err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
-
-	if socket < 0 || socket >= maxSocket {
-		return 0, ErrSocketInvalidArg
-	} else if !sockets[socket].inUse {
+func (s *Socket) SendTo(buf []byte, addr net.Addr, deadline time.Time) (sz int, err error) {
+	if s.sockfd < 0 {
 		return 0, ErrSocketInvalid
 	}
 
 	strSend := types.SendCmd{
-		Sock:        int8(socket),
+		Sock:        s.sockfd,
 		U16DataSize: uint16(len(buf)),
 		StrAddr: types.SockAddr{
 			U16Family: afInet,
-			U16Port:   addr.Port,
-			U32IPAddr: addr.Address,
 		},
-		U16SessionID: sockets[socket].sessionId,
+		U16SessionID: s.driver.getSessionId(),
 	}
 
-	if err = hif.Send(GroupIP, OpcodeSocketSendTo|protocol.OpcodeReqDataPkt, strSend.Bytes(), buf, udpTxPacketOffset); err != nil {
+	// addr can be TCPAddr or UDPAddr
+	switch actualAddr := addr.(type) {
+	case *TCPAddr:
+		strSend.StrAddr.U32IPAddr = actualAddr.U32IPAddr
+		strSend.StrAddr.U16Port = Htons(actualAddr.U16Port)
+	case *UDPAddr:
+		strSend.StrAddr.U32IPAddr = actualAddr.U32IPAddr
+		strSend.StrAddr.U16Port = Htons(actualAddr.U16Port)
+	default:
+		return 0, ErrInvalidParameter
+	}
+
+	// Create a channel to receive the reply on
+	replyChan := make(chan any, 1)
+	s.callbackChan.Store(strSend.U16SessionID, replyChan)
+	defer close(replyChan)
+
+	if err = s.driver.hif.Send(GroupIP, OpcodeSocketSendTo|protocol.OpcodeReqDataPkt, strSend.Bytes(), buf, udpTxPacketOffset); err != nil {
+		s.callbackChan.Delete(strSend.U16SessionID)
 		return 0, ErrSocketBufferFull
 	}
 
 	var strSendReply types.SendReply
-	timer := time.NewTimer(time.Second * 30)
 
 	// Wait for the response
-	select {
-	case reply := <-sockets[socket].callbackChan:
-		strSendReply = reply.(types.SendReply)
-	case <-timer.C:
-		return 0, ErrSocketTimeout
+	if s.sendDeadline.IsZero() {
+		select {
+		case reply := <-replyChan:
+			strSendReply = reply.(types.SendReply)
+		}
+	} else {
+		select {
+		case reply := <-replyChan:
+			strSendReply = reply.(types.SendReply)
+		case <-time.After(s.sendDeadline.Sub(time.Now())):
+			s.callbackChan.Delete(strSend.U16SessionID)
+			return 0, ErrSocketTimeout
+		}
 	}
 
 	// Check for error
@@ -581,107 +575,274 @@ func (w *WINC) SendTo(socket Socket, buf []byte, addr Sockaddr) (sz int, err err
 	return
 }
 
-func (w *WINC) Recv(socket Socket, buf []byte, timeout time.Duration) (sz int, err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
+func (s *Socket) Recv(buf []byte, deadline time.Time) (sz int, err error) {
+	// Block concurrent reads
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	if socket < 0 || socket >= maxSocket {
-		return 0, ErrSocketInvalidArg
-	} else if !sockets[socket].inUse {
+	if s.sockfd < 0 {
 		return 0, ErrSocketInvalid
 	}
 
-	// Only receive new bytes when the request is larger than the contents of the receiver buffer for this socket.
-	if len(buf) > sockets[socket].buffer.Length() {
-		cmd := OpcodeSocketRecv
-		if sockets[socket].sslFlags&uint8(sslFlagsActive) != 0 && sockets[socket].sslFlags&uint8(sslFlagsDelay) == 0 {
-			cmd = OpcodeSocketSslRecv
+	var timeout uint32
+	if !deadline.IsZero() {
+		timeout = uint32(deadline.Sub(time.Now()).Milliseconds())
+		if timeout <= 0 {
+			timeout = 0
 		}
-
-		strRecv := types.RecvCmd{
-			U32Timeoutmsec: uint32(timeout.Milliseconds()),
-			Sock:           int8(socket),
-			U16SessionID:   sockets[socket].sessionId,
-			U16BufLen:      uint16(len(buf)),
-		}
-
-		if err = hif.Send(GroupIP, cmd, strRecv.Bytes(), nil, 0); err != nil {
-			return 0, ErrSocketBufferFull
-		}
-
-		var strRecvReply types.RecvReply
-
-		// Wait for the reply
-		select {
-		case reply := <-sockets[socket].callbackChan:
-			strRecvReply = reply.(types.RecvReply)
-		}
-
-		if strRecvReply.S16RecvStatus < 0 && sockets[socket].buffer.IsEmpty() {
-			return 0, SocketError(strRecvReply.S16RecvStatus)
-		}
+	} else {
+		timeout = 0xFFFFFFFF
 	}
 
-	sz, _ = sockets[socket].buffer.Read(buf)
+	// Keep track of how much data is left to be received from the WINC firmware
+	remaining := len(buf)
+
+	// Attempt to receive data repeatedly until the input buffer is entirely filled
+	for remaining != 0 {
+		// Send Recv request if there are no bytes available to read
+		if s.bufferLen == 0 {
+			// Request that the firmware receives more data
+			cmd := OpcodeSocketRecv
+			if s.sslFlags&sslFlagsActive != 0 && s.sslFlags&sslFlagsDelay == 0 {
+				cmd = OpcodeSocketSslRecv
+			}
+
+			strRecv := types.RecvCmd{
+				U32Timeoutmsec: timeout,
+				Sock:           s.sockfd,
+				U16SessionID:   s.driver.getSessionId(),
+				U16BufLen:      uint16(len(buf)),
+			}
+
+			// Create a channel to receive the reply on
+			replyChan := make(chan any, 1)
+			s.callbackChan.Store(strRecv.U16SessionID, replyChan)
+
+			if err = s.driver.hif.Send(GroupIP, cmd, strRecv.Bytes(), nil, 0); err != nil {
+				close(replyChan)
+				return 0, ErrSocketBufferFull
+			}
+
+			// Wait for the reply
+			var strRecvReply types.RecvReply
+			select {
+			case reply := <-replyChan:
+				strRecvReply = reply.(types.RecvReply)
+				close(replyChan)
+			}
+
+			if strRecvReply.S16RecvStatus < 0 {
+				// Return the amount of data actually read and the error
+				return sz, SocketError(strRecvReply.S16RecvStatus)
+			}
+		}
+
+		// Calculate how much data can be received
+		receiveLen := remaining
+		if receiveLen > s.bufferLen {
+			// Cap at the number of remaining bytes available to be read. A Recv request will be made after receiving
+			// the bytes from the WINC firmware.
+			receiveLen = s.bufferLen
+		}
+
+		// TODO: hif.Receive should probably report the number of bytes that were actually returned from the firmware.
+		err = s.driver.hif.Receive(s.bufferAddr, buf[sz:sz+receiveLen], true)
+		s.bufferLen -= receiveLen
+		s.bufferAddr += uint32(receiveLen)
+
+		sz += receiveLen
+		remaining -= receiveLen
+	}
+
 	return
 }
 
-func (w *WINC) RecvFrom(socket Socket, buf []byte, timeout time.Duration) (sz int, err error) {
-	sockets[socket].mutex.Lock()
-	defer sockets[socket].mutex.Unlock()
+func (s *Socket) RecvFrom(buf []byte, addr net.Addr, deadline time.Time) (sz int, err error) {
+	// Block concurrent reads
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	if socket < 0 || socket >= maxSocket {
-		return 0, ErrSocketInvalidArg
-	} else if !sockets[socket].inUse {
+	if s.sockfd < 0 {
 		return 0, ErrSocketInvalid
 	}
 
-	// Only receive new bytes when the request is larger than the contents of the receiver buffer for this socket.
-	if len(buf) > sockets[socket].buffer.Length() {
-		strRecv := types.RecvCmd{
-			U32Timeoutmsec: uint32(timeout.Milliseconds()),
-			Sock:           int8(socket),
-			U16SessionID:   sockets[socket].sessionId,
-			U16BufLen:      uint16(len(buf)),
+	var timeout uint32
+	if !deadline.IsZero() {
+		timeout = uint32(deadline.Sub(time.Now()).Milliseconds())
+		if timeout <= 0 {
+			timeout = 0
+		}
+	} else {
+		timeout = 0xFFFFFFFF
+	}
+
+	// Keep track of how much data is left to be received from the WINC firmware
+	remaining := len(buf)
+
+	// Attempt to receive data repeatedly until the input buffer is entirely filled
+	for remaining != 0 {
+		// Send Recv request if there are no bytes available to read
+		if s.bufferLen == 0 {
+			strRecv := types.RecvCmd{
+				U32Timeoutmsec: timeout,
+				Sock:           s.sockfd,
+				U16SessionID:   s.driver.getSessionId(),
+				U16BufLen:      uint16(len(buf)),
+			}
+
+			// addr can be TCPAddr or UDPAddr
+			/*
+				switch actualAddr := addr.(type) {
+				case *net.TCPAddr:
+					strConnect.StrAddr.U32IPAddr = binary.BigEndian.Uint32(actualAddr.IP)
+					strConnect.StrAddr.U16Port = uint16(actualAddr.Port)
+				case *net.UDPAddr:
+					strConnect.StrAddr.U32IPAddr = binary.BigEndian.Uint32(actualAddr.IP)
+					strConnect.StrAddr.U16Port = uint16(actualAddr.Port)
+				}
+			*/
+
+			// Create a channel to receive the reply on
+			replyChan := make(chan any, 1)
+			s.callbackChan.Store(strRecv.U16SessionID, replyChan)
+
+			if err = s.driver.hif.Send(GroupIP, OpcodeSocketRecvFrom, strRecv.Bytes(), nil, 0); err != nil {
+				close(replyChan)
+				return
+			}
+
+			var strRecvReply types.RecvReply
+
+			// Wait for reply
+			select {
+			case reply := <-replyChan:
+				strRecvReply = reply.(types.RecvReply)
+				close(replyChan)
+			}
+
+			if strRecvReply.S16RecvStatus < 0 {
+				return sz, SocketError(strRecvReply.S16RecvStatus)
+			}
 		}
 
-		if err = hif.Send(GroupIP, OpcodeSocketRecvFrom, strRecv.Bytes(), nil, 0); err != nil {
-			return
+		// Calculate how much data can be received
+		receiveLen := remaining
+		if receiveLen > s.bufferLen {
+			// Cap at the number of remaining bytes available to be read. A Recv request will be made after receiving
+			// the bytes from the WINC firmware.
+			receiveLen = s.bufferLen
 		}
 
-		var strRecvReply types.RecvReply
+		// TODO: hif.Receive should probably report the number of bytes that were actually returned from the firmware.
+		err = s.driver.hif.Receive(s.bufferAddr, buf[sz:sz+receiveLen], true)
+		s.bufferLen -= receiveLen
+		s.bufferAddr += uint32(receiveLen)
 
-		// Wait for replay
-		select {
-		case reply := <-sockets[socket].callbackChan:
-			strRecvReply = reply.(types.RecvReply)
+		sz += receiveLen
+		remaining -= receiveLen
+	}
+
+	return
+}
+
+func (w *WINC) Socket(sockType SocketType, config SocketConfig) (socket *Socket, err error) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	sockfd := -1
+
+	if sockType == SocketTypeStream {
+		// Find available TCP socket
+		for i := 0; i < maxTcpSocket; i++ {
+			if w.sockets[i] == nil {
+				sockfd = i
+				break
+			}
 		}
-
-		if strRecvReply.S16RecvStatus < 0 && sockets[socket].buffer.IsEmpty() {
-			return 0, SocketError(strRecvReply.S16RecvStatus)
+	} else if sockType == SocketTypeDatagram {
+		// Find available UDP socket
+		for i := maxTcpSocket; i < maxSocket; i++ {
+			if w.sockets[i] == nil {
+				sockfd = i
+				break
+			}
 		}
 	}
 
-	sz, _ = sockets[socket].buffer.Read(buf)
+	if sockfd >= 0 {
+		socket = &Socket{
+			sockfd:     int8(sockfd),
+			acceptChan: make(chan int8, 1),
+			driver:     w,
+		}
+
+		if sockType == SocketTypeStream && config != SocketConfigSslOff {
+			// Create TLS enabled socket
+			strSSLCreate := types.SSLSocketCreateCmd{
+				SslSock: int8(sockfd),
+			}
+
+			if err = w.hif.Send(GroupWIFI, OpcodeSocketSslCreate, strSSLCreate.Bytes(), nil, 0); err != nil {
+				return nil, err
+			}
+
+			// Set TLS flags
+			w.sockets[sockfd].sslFlags = sslFlagsActive | sslFlagsNoTxCopy
+			if config == SocketConfigSslDelay {
+				w.sockets[sockfd].sslFlags |= sslFlagsDelay
+			}
+		}
+
+		// Get unique session id
+		socket.sessionId = w.getSessionId()
+		w.sockets[sockfd] = socket
+	} else {
+		err = ErrNoAvailableSocket
+	}
+
 	return
+}
+
+// SocketByDescriptor returns the pointer to an existing socket by it file descriptor. The function is useful for when
+// the driver accepts an incoming connection since it will automatically open a socket for it.
+func (w *WINC) SocketByDescriptor(sockfd int8) (*Socket, error) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	if sockfd < 0 || sockfd >= maxSocket {
+		return nil, ErrSocketDoesNotExist
+	}
+
+	return w.sockets[sockfd], nil
 }
 
 func (w *WINC) GetHostByName(hostname string) (address uint32, err error) {
-	buf := make([]byte, hostnameMaxLength+1)
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	buf := make([]byte, len(hostname)+1)
 	if len(hostname) <= hostnameMaxLength {
 		copy(buf, hostname)
-		if err = hif.Send(GroupIP, OpcodeSocketDnsResolve, buf[:len(hostname)+1], nil, 0); err != nil {
+		if err = w.hif.Send(GroupIP, OpcodeSocketDnsResolve, buf, nil, 0); err != nil {
 			return
 		}
 
-		timeout := time.NewTimer(time.Second * 35)
 		select {
-		case strDnsReply := <-hostnameChan:
+		case reply := <-w.callbackChan:
+			strDnsReply := reply.(types.DnsReply)
 			address = strDnsReply.U32HostIP
-		case <-timeout.C:
-			err = ErrOperationTimeout
 		}
 	}
+
+	return
+}
+
+// getSessionId returns a unique id number. This call is thread-safe.
+func (w *WINC) getSessionId() (id uint16) {
+	w.sessionCounterMutex.Lock()
+	id = w.sessionCounter
+	w.sessionCounter++
+	w.sessionCounterMutex.Unlock()
 
 	return
 }
@@ -690,117 +851,144 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 	switch id {
 	case OpcodeSocketAccept:
 		var strAcceptReply types.AcceptReply
-		if err = hif.Receive(address, strAcceptReply.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strAcceptReply.Bytes(), false); err != nil {
 			return
 		}
 
 		strAcceptReply.Deref()
 		strAcceptReply.Free()
 
-		sockets[strAcceptReply.SConnectedSock].offset = strAcceptReply.U16AppDataOffset
-		sockets[strAcceptReply.SConnectedSock].inUse = true
+		if strAcceptReply.SConnectedSock > 0 {
+			// Create a socket struct for the connected socket
+			w.sockets[strAcceptReply.SConnectedSock] = &Socket{
+				sockfd:    strAcceptReply.SConnectedSock,
+				sslFlags:  w.sockets[strAcceptReply.SListenSock].sslFlags,
+				sessionId: w.getSessionId(),
+				offset:    strAcceptReply.U16AppDataOffset - protocol.M2M_HIF_HDR_OFFSET,
+				driver:    w,
+			}
 
-		// Get unique session id
-		sessionCounterMutex.Lock()
-		sockets[strAcceptReply.SConnectedSock].sessionId = sessionCounter
-		sessionCounter++
-		sessionCounterMutex.Unlock()
+			switch w.sockets[strAcceptReply.SListenSock].addr.(type) {
+			case *TCPAddr:
+				w.sockets[strAcceptReply.SConnectedSock].addr = &TCPAddr{
+					U16Family: afInet,
+					U16Port:   strAcceptReply.StrAddr.U16Port,
+					U32IPAddr: strAcceptReply.StrAddr.U32IPAddr,
+				}
+			case *UDPAddr:
+				w.sockets[strAcceptReply.SConnectedSock].addr = &UDPAddr{
+					U16Family: afInet,
+					U16Port:   strAcceptReply.StrAddr.U16Port,
+					U32IPAddr: strAcceptReply.StrAddr.U32IPAddr,
+				}
+			}
+
+			// Signal that a socket is ready
+			w.sockets[strAcceptReply.SListenSock].acceptChan <- strAcceptReply.SConnectedSock
+		} else {
+			w.sockets[strAcceptReply.SListenSock].acceptChan <- -1
+		}
 
 		data = strAcceptReply
-	case OpcodeSocketBind:
-		fallthrough
-	case OpcodeSocketSslBind:
+	case OpcodeSocketBind, OpcodeSocketSslBind:
 		var strBindReply types.BindReply
-		if err = hif.Receive(address, strBindReply.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strBindReply.Bytes(), false); err != nil {
 			return
 		}
 
 		strBindReply.Deref()
 		strBindReply.Free()
 
-		sockets[strBindReply.Sock].callbackChan <- strBindReply
+		if w.sockets[strBindReply.Sock] != nil {
+			if replyChan, ok := w.sockets[strBindReply.Sock].callbackChan.LoadAndDelete(strBindReply.U16SessionID); ok {
+				replyChan <- strBindReply
+			}
+		}
+
 		data = strBindReply
-	case OpcodeSocketConnect:
-		fallthrough
-	case OpcodeSocketSslConnect:
+	case OpcodeSocketConnect, OpcodeSocketSslConnect:
 		var strConnectReply types.ConnectReply
-		if err = hif.Receive(address, strConnectReply.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strConnectReply.Bytes(), false); err != nil {
 			return
 		}
 
 		strConnectReply.Deref()
 		strConnectReply.Free()
 
-		sockets[strConnectReply.Sock].callbackChan <- strConnectReply
+		if w.sockets[strConnectReply.Sock] != nil {
+			sessionId := w.sockets[strConnectReply.Sock].sessionId
+			if replyChan, ok := w.sockets[strConnectReply.Sock].callbackChan.LoadAndDelete(sessionId); ok {
+				replyChan <- strConnectReply
+			}
+		}
+
 		data = strConnectReply
 	case OpcodeSocketListen:
 		var strListenReply types.ListenReply
-		if err = hif.Receive(address, strListenReply.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strListenReply.Bytes(), false); err != nil {
 			return
 		}
 
 		strListenReply.Deref()
 		strListenReply.Free()
 
-		sockets[strListenReply.Sock].callbackChan <- strListenReply
+		if w.sockets[strListenReply.Sock] != nil {
+			if replyChan, ok := w.sockets[strListenReply.Sock].callbackChan.LoadAndDelete(strListenReply.U16SessionID); ok {
+				replyChan <- strListenReply
+			}
+		}
+
 		data = strListenReply
-	case OpcodeSocketRecv:
-		fallthrough
-	case OpcodeSocketSslRecv:
-		fallthrough
-	case OpcodeSocketRecvFrom:
+	case OpcodeSocketRecv, OpcodeSocketSslRecv, OpcodeSocketRecvFrom:
 		var strRecvReply types.RecvReply
-		if err = hif.Receive(address, strRecvReply.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strRecvReply.Bytes(), false); err != nil {
 			return
 		}
 
 		strRecvReply.Deref()
 		strRecvReply.Free()
+		if strRecvReply.Sock >= 0 && strRecvReply.Sock < maxSocket {
+			if w.sockets[strRecvReply.Sock] != nil {
+				if strRecvReply.S16RecvStatus > 0 && strRecvReply.S16RecvStatus < int16(sz) {
+					// Cache data location for Recv can retrieve the data from the WINC firmware directly
+					w.sockets[strRecvReply.Sock].bufferAddr = address + uint32(strRecvReply.U16DataOffset)
+					w.sockets[strRecvReply.Sock].bufferLen += int(strRecvReply.S16RecvStatus)
+				}
 
-		if strRecvReply.Sock < 0 || strRecvReply.Sock >= maxSocket {
+				if replyChan, ok := w.sockets[strRecvReply.Sock].callbackChan.LoadAndDelete(strRecvReply.U16SessionID); ok {
+					replyChan <- strRecvReply
+				}
+			}
+			data = strRecvReply
+		} else {
 			return nil, ErrSocketDoesNotExist
 		}
-
-		if sockets[strRecvReply.Sock].sessionId == strRecvReply.U16SessionID {
-			if strRecvReply.S16RecvStatus > 0 && strRecvReply.S16RecvStatus < int16(sz) {
-				address += uint32(strRecvReply.U16DataOffset)
-
-				buf := make([]byte, int(strRecvReply.S16RecvStatus))
-				err = hif.Receive(address, buf, true)
-				sockets[strRecvReply.Sock].buffer.Write(buf)
-			}
-		} else {
-			err = hif.Receive(0, nil, true)
-		}
-
-		sockets[strRecvReply.Sock].callbackChan <- strRecvReply
-		data = strRecvReply
-	case OpcodeSocketSend:
-		fallthrough
-	case OpcodeSocketSslSend:
-		fallthrough
-	case OpcodeSocketSendTo:
+	case OpcodeSocketSend, OpcodeSocketSslSend, OpcodeSocketSendTo:
 		var strSendReply types.SendReply
-		if err = hif.Receive(address, strSendReply.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strSendReply.Bytes(), false); err != nil {
 			return
 		}
 
 		strSendReply.Deref()
 		strSendReply.Free()
 
-		sockets[strSendReply.Sock].callbackChan <- strSendReply
+		if w.sockets[strSendReply.Sock] != nil {
+			if replyChan, ok := w.sockets[strSendReply.Sock].callbackChan.LoadAndDelete(strSendReply.U16SessionID); ok {
+				replyChan <- strSendReply
+			}
+		}
 
 		data = strSendReply
 	case OpcodeSocketDnsResolve:
 		var strDnsReply types.DnsReply
-		if err = hif.Receive(address, strDnsReply.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strDnsReply.Bytes(), false); err != nil {
 			return
 		}
 
 		strDnsReply.Deref()
 		strDnsReply.Free()
 
-		hostnameChan <- strDnsReply
+		w.callbackChan <- strDnsReply
 		data = strDnsReply
 	}
 

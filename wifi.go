@@ -25,14 +25,18 @@ SOFTWARE.
 package winc
 
 import (
+	"encoding/binary"
+	"time"
+
 	"github.com/waj334/tinygo-winc/protocol"
 	"github.com/waj334/tinygo-winc/protocol/types"
-	"time"
 )
 
 // Wifi opcodes
 
 const (
+	OpcodeWifiReqGetConnInfo = 5
+	OpcodeWifiRespConnInfo   = 6
 	OpcodeWifiRespGetSysTime = 27
 )
 
@@ -117,6 +121,9 @@ type WifiConnectionSettings struct {
 }
 
 func (w *WINC) WifiConnectPsk(settings WifiConnectionSettings) (err error) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
 	settings.security = WifiSecurityWpaPsk
 	if len(settings.Ssid) == 0 {
 		return ErrInvalidParameter
@@ -146,7 +153,7 @@ func (w *WINC) WifiConnectPsk(settings WifiConnectionSettings) (err error) {
 	copy(psk.Au8Passphrase[:], settings.Passphrase)
 
 	// Send the HIF command
-	if err = hif.Send(GroupWIFI,
+	if err = w.hif.Send(GroupWIFI,
 		OpcodeWifiReqConn|protocol.OpcodeReqDataPkt,
 		ctrl.Bytes(),
 		psk.Bytes(),
@@ -159,18 +166,43 @@ func (w *WINC) WifiConnectPsk(settings WifiConnectionSettings) (err error) {
 }
 
 func (w *WINC) WifiDisconnect() error {
-	return hif.Send(GroupWIFI, OpcodeWifiReqDisconnect, nil, nil, 0)
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	return w.hif.Send(GroupWIFI, OpcodeWifiReqDisconnect, nil, nil, 0)
 }
 
 func (w *WINC) GetWifiState() WifiState {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
 	return w.wifiState
+}
+
+func (w *WINC) GetConnectionInfo() (strConnInfo types.M2MConnInfo, err error) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	w.pendingCallback = true
+	if err = w.hif.Send(GroupWIFI, OpcodeWifiReqGetConnInfo, nil, nil, 0); err != nil {
+		return
+	}
+
+	// Wait for reply
+	select {
+	case reply := <-w.callbackChan:
+		strConnInfo = reply.(types.M2MConnInfo)
+		w.pendingCallback = false
+	}
+
+	return
 }
 
 func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (data any, err error) {
 	switch id {
 	case OpcodeWifiRespGetSysTime:
 		var strSysTime types.SystemTime
-		if err = hif.Receive(address, strSysTime.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strSysTime.Bytes(), false); err != nil {
 			return
 		}
 
@@ -180,18 +212,22 @@ func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (da
 		data = strSysTime
 	case OpcodeWifiReqDhcpConf:
 		var strIpConfig types.M2MIPConfig
-		if err = hif.Receive(address, strIpConfig.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strIpConfig.Bytes(), false); err != nil {
 			return
 		}
 
 		strIpConfig.Deref()
 		strIpConfig.Free()
 
-		w.ipAddress = strIpConfig.U32StaticIP
+		w.ipAddr.IP = make([]byte, 4)
+		w.ipAddr.Mask = make([]byte, 4)
+		binary.BigEndian.PutUint32(w.ipAddr.IP, strIpConfig.U32StaticIP)
+		binary.BigEndian.PutUint32(w.ipAddr.Mask, strIpConfig.U32SubnetMask)
+
 		data = strIpConfig
 	case OpcodeWifiRespConStateChanged:
 		var strState types.M2mWifiStateChanged
-		if err = hif.Receive(address, strState.Bytes(), false); err != nil {
+		if err = w.hif.Receive(address, strState.Bytes(), false); err != nil {
 			return
 		}
 
@@ -200,6 +236,17 @@ func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (da
 
 		w.wifiState = WifiState(strState.U8CurrState)
 		data = strState
+	case OpcodeWifiRespConnInfo:
+		var strConnInfo types.M2MConnInfo
+		if err = w.hif.Receive(address, strConnInfo.Bytes(), false); err != nil {
+			return
+		}
+
+		strConnInfo.Deref()
+		strConnInfo.Free()
+
+		w.callbackChan <- strConnInfo
+		data = strConnInfo
 	}
 
 	return

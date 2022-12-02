@@ -60,10 +60,8 @@ func (data dataPacket) read(t *transport, clockless, crcEnabled bool) (err error
 
 	readData:
 		// Receive the data
-		for iii := range data[offset:min(len(data), offset+dataPacketSize)] {
-			if data[iii], err = t.Transfer(0); err != nil {
-				return err
-			}
+		if _, err = t.Read(data[offset:min(len(data), offset+dataPacketSize)]); err != nil {
+			return
 		}
 
 		// CRC is only available during clocked reads
@@ -82,10 +80,10 @@ func (data dataPacket) read(t *transport, clockless, crcEnabled bool) (err error
 
 func (data dataPacket) write(t *transport, crcEnabled bool) error {
 	t.cs.Low()
+	defer t.cs.High()
 
 	// Determine how many data packets will be sent
 	count := (len(data) / dataPacketSize) + 1
-
 	// Tell the client that this is the first packet
 	seq := first
 
@@ -98,17 +96,12 @@ func (data dataPacket) write(t *transport, crcEnabled bool) error {
 	for i := 0; i < count; i++ {
 		// Transfer the header first
 		if _, err := t.Transfer(byte(0xF0 | seq)); err != nil {
-			t.cs.High()
 			return err
 		}
 
 		// Transmit a portion of slice
-		for _, b := range data[offset:min(len(data), offset+dataPacketSize)] {
-			if _, err := t.Transfer(b); err != nil {
-				// TODO: retry
-				t.cs.High()
-				return err
-			}
+		if _, err := t.Write(data[offset:min(len(data), offset+dataPacketSize)]); err != nil {
+			return err
 		}
 
 		if crcEnabled {
@@ -131,7 +124,6 @@ func (data dataPacket) write(t *transport, crcEnabled bool) error {
 		}
 	}
 
-	t.cs.High()
 	return nil
 }
 

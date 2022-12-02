@@ -83,6 +83,26 @@ func (t *transport) Transfer(b byte) (byte, error) {
 	return t.spi.Transfer(b)
 }
 
+func (t *transport) Write(b []byte) (n int, err error) {
+	t.spiMutex.Lock()
+	defer t.spiMutex.Unlock()
+
+	err = t.spi.Tx(b, nil)
+	n = len(b)
+
+	return
+}
+
+func (t *transport) Read(b []byte) (n int, err error) {
+	t.spiMutex.Lock()
+	defer t.spiMutex.Unlock()
+
+	err = t.spi.Tx(nil, b)
+	n = len(b)
+
+	return
+}
+
 func (t *transport) initPacketSize() error {
 	// Set the packet size
 	result, err := t.readRegister(_SPI_BASE + 0x24)
@@ -134,17 +154,21 @@ func (t *transport) readRegister(address uint32) (result uint32, err error) {
 
 		// Send command
 		if err = cmd.write(t); err != nil {
+			time.Sleep(time.Millisecond)
 			if err = t.internalReset(); err != nil {
 				return 0, err
 			}
+			time.Sleep(time.Millisecond)
 			continue
 		}
 
 		// Wait for command response
 		if err = cmd.response(t, clockless); err != nil {
+			time.Sleep(time.Millisecond)
 			if err = t.internalReset(); err != nil {
 				return 0, err
 			}
+			time.Sleep(time.Millisecond)
 			continue
 		}
 
@@ -152,9 +176,11 @@ func (t *transport) readRegister(address uint32) (result uint32, err error) {
 		var buf [4]byte
 		var data dataPacket = buf[:]
 		if err = data.read(t, clockless, t.crcEnabled); err != nil {
+			time.Sleep(time.Millisecond)
 			if err = t.internalReset(); err != nil {
 				return 0, err
 			}
+			time.Sleep(time.Millisecond)
 			continue
 		}
 
@@ -187,9 +213,11 @@ func (t *transport) writeRegister(address, value uint32) (err error) {
 
 		// Send command
 		if err = cmd.write(t); err != nil {
+			time.Sleep(time.Millisecond)
 			if err = t.internalReset(); err != nil {
 				return err
 			}
+			time.Sleep(time.Millisecond)
 			continue
 		}
 
@@ -200,9 +228,11 @@ func (t *transport) writeRegister(address, value uint32) (err error) {
 
 		// Wait for command response
 		if err = cmd.response(t, clockless); err != nil {
+			time.Sleep(time.Millisecond)
 			if err = t.internalReset(); err != nil {
 				return err
 			}
+			time.Sleep(time.Millisecond)
 			continue
 		}
 
@@ -240,17 +270,21 @@ func (t *transport) readBlock(address uint32, data []byte) (err error) {
 
 		// Get response to command
 		if err = cmd.response(t, false); err != nil {
+			time.Sleep(time.Millisecond)
 			if err = t.internalReset(); err != nil {
 				return err
 			}
+			time.Sleep(time.Millisecond)
 			continue
 		}
 
 		// Receive the data
 		if err = pkt.read(t, false, t.crcEnabled); err != nil {
+			time.Sleep(time.Millisecond)
 			if err = t.internalReset(); err != nil {
 				return err
 			}
+			time.Sleep(time.Millisecond)
 			continue
 		}
 
@@ -278,7 +312,14 @@ func (t *transport) writeBlock(address uint32, data []byte) (err error) {
 			cmd := commandPacket{}
 
 			// Format the DMA extended write command
-			cmd.dmaExtendedWrite(address+uint32(offset), len(window))
+			l := len(window)
+			if l == 1 {
+				tmp := make([]byte, 2)
+				tmp[0] = window[0]
+				window = tmp
+				l = 2
+			}
+			cmd.dmaExtendedWrite(address+uint32(offset), l)
 
 			// Send the command
 			if err = cmd.write(t); err != nil {
@@ -307,7 +348,9 @@ func (t *transport) writeBlock(address uint32, data []byte) (err error) {
 		// Stop the loop if there was no failed attempt
 		break
 	reset:
+		time.Sleep(time.Millisecond)
 		t.internalReset()
+		time.Sleep(time.Millisecond)
 	}
 
 	return
@@ -322,7 +365,6 @@ func (t *transport) reset() (err error) {
 
 func (t *transport) internalReset() (err error) {
 	// NOTE: Do not lock mutex in this function
-	time.Sleep(time.Millisecond * 100)
 	cmd := commandPacket{}
 	cmd.softReset()
 

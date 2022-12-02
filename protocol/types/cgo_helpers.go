@@ -1608,7 +1608,6 @@ func (x *SendReply) PassRef() (*C.tstrSendReply, *cgoAllocMap) {
 	x.reffbd9c021 = reffbd9c021
 	x.allocsfbd9c021 = allocsfbd9c021
 	return reffbd9c021, allocsfbd9c021
-
 }
 
 // PassValue does the same as PassRef except that it will try to dereference the returned pointer.
@@ -7973,19 +7972,20 @@ const sizeOfPrngValue = unsafe.Sizeof([1]C.tstrPrng{})
 // copyPUint8_tBytes copies the data from Go slice as *C.uint8_t.
 func copyPUint8_tBytes(slice *sliceHeader) (*C.uint8_t, *cgoAllocMap) {
 	allocs := new(cgoAllocMap)
-	//defer runtime.SetFinalizer(allocs, func(a *cgoAllocMap) {
-	//	go a.Free()
-	//})
+	defer runtime.SetFinalizer(allocs, func(a *cgoAllocMap) {
+		go a.Free()
+	})
 
 	//data := unsafe.Slice(slice.Data, slice.Len)
 	//mem0 := (*sliceHeader)(unsafe.Pointer(&data))
 
-	/*mem0 := unsafe.Pointer(C.CBytes(*(*[]byte)(unsafe.Pointer(&sliceHeader{
+	mem0 := unsafe.Pointer(C.CBytes(*(*[]byte)(unsafe.Pointer(&sliceHeader{
 		Data: slice.Data,
 		Len:  int(sizeOfUint8_tValue) * slice.Len,
 		Cap:  int(sizeOfUint8_tValue) * slice.Len,
-	}))))*/
-	//allocs.Add(mem0.Data)
+	}))))
+
+	allocs.Add(mem0)
 
 	return (*C.uint8_t)(slice.Data), allocs
 }

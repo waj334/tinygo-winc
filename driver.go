@@ -25,18 +25,12 @@ SOFTWARE.
 package winc
 
 import (
+	"net"
 	"sync"
 	"time"
 
 	"github.com/waj334/tinygo-winc/protocol"
 	"github.com/waj334/tinygo-winc/protocol/hal"
-)
-
-var (
-	initialized       = false
-	hif               protocol.Hif
-	isrSignal         chan bool
-	isrShutdownSignal chan bool
 )
 
 type WINC struct {
@@ -49,7 +43,22 @@ type WINC struct {
 	ResetIRQFunc hal.ResetInterruptHandlerFunc
 
 	wifiState WifiState
-	ipAddress uint32
+	ipAddr    net.IPNet
+
+	hif protocol.Hif
+
+	initialized       bool
+	isrSignal         chan bool
+	isrShutdownSignal chan bool
+
+	callbackChan chan any
+
+	pendingCallback bool
+
+	sockets             [maxSocket]*Socket
+	sessionCounterMutex sync.Mutex
+	sessionCounter      uint16
+	SocketBufferLength  int
 
 	mutex sync.Mutex
 }
@@ -58,43 +67,52 @@ func (w *WINC) Initialize() (err error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	if !initialized {
+	if !w.initialized {
 		// Create the hardware interface abstraction layer
-		hif = protocol.CreateHif(w.SPI, w.CS)
+		w.hif = protocol.CreateHif(w.SPI, w.CS)
 
 		// Initialize the HAL
-		err = hif.Init()
+		err = w.hif.Init()
 		if err != nil {
 			return
 		}
 
 		// Register interrupt callbacks
-		hif.RegisterCallback(GroupWIFI, w.wifiCallback)
-		hif.RegisterCallback(GroupIP, w.socketCallback)
+		w.hif.RegisterCallback(GroupWIFI, w.wifiCallback)
+		w.hif.RegisterCallback(GroupIP, w.socketCallback)
 
 		// Start the interrupt service (go)routine
-		isrSignal = make(chan bool, 1)
-		isrShutdownSignal = make(chan bool, 1)
-		go w.isr(isrSignal)
+		w.isrSignal = make(chan bool, 1)
+		w.isrShutdownSignal = make(chan bool, 1)
+		go w.isr(w.isrSignal)
 
 		// set up the interrupt
 		if err = w.SetIRQFunc(); err != nil {
 			return
 		}
 
-		initialized = true
+		// Create the callback channel
+		w.callbackChan = make(chan any, 1)
+
+		// set up sockets
+		w.sessionCounter = 1
+		if w.SocketBufferLength == 0 {
+			// Set to default
+			w.SocketBufferLength = 2048
+		}
+
+		w.initialized = true
 	}
 
 	return
 }
 
 func (w *WINC) OpenEventChannel() <-chan protocol.Event {
-	return hif.OpenEventChannel()
+	return w.hif.OpenEventChannel()
 }
 
 // Reset the SoC by driving chip enable and reset pins low then high
 func (w *WINC) Reset() {
-	println("driver: About to reset WINC driver...")
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
@@ -102,27 +120,27 @@ func (w *WINC) Reset() {
 	w.ResetIRQFunc()
 
 	// Stop the ISR routine
-	if isrSignal != nil {
+	if w.isrSignal != nil {
 		select {
-		case isrSignal <- false:
-			close(isrSignal)
+		case w.isrSignal <- false:
+			close(w.isrSignal)
 		default:
-			close(isrSignal)
+			close(w.isrSignal)
 		}
 
 		// Wait for isr to be fully shutdown
-		<-isrShutdownSignal
-		close(isrShutdownSignal)
+		<-w.isrShutdownSignal
+		close(w.isrShutdownSignal)
 
-		isrSignal = nil
+		w.isrSignal = nil
 	}
 
-	println("driver: Closed ISR signal channel")
+	// Shutdown driver.hif
+	w.hif.Shutdown()
 
-	// Shutdown Hif
-	hif.Shutdown()
-
-	println("driver: Shutdown HIF")
+	// Reset sockets
+	w.sockets = [maxSocket]*Socket{}
+	//currentSocket = nil
 
 	// Drive the pins low
 	w.EnablePin.Low()
@@ -137,27 +155,25 @@ func (w *WINC) Reset() {
 	w.ResetPin.High()
 	time.Sleep(time.Millisecond * 10)
 
-	initialized = false
-
-	println("driver: WINC driver reset complete")
+	w.initialized = false
 }
 
 func (w *WINC) SetGPIODirection(gpio GPIOType, direction GPIODirection) error {
-	return hif.SetGPIODirection(uint8(gpio), uint8(direction))
+	return w.hif.SetGPIODirection(uint8(gpio), uint8(direction))
 }
 
 func (w *WINC) SetGPIOState(gpio GPIOType, state GPIOState) error {
-	return hif.SetGPIOValue(uint8(gpio), uint8(state))
+	return w.hif.SetGPIOValue(uint8(gpio), uint8(state))
 }
 
 func (w *WINC) GetGPIOState(gpio GPIOType) (GPIOState, error) {
-	state, err := hif.GetGPIOValue(uint8(gpio))
+	state, err := w.hif.GetGPIOValue(uint8(gpio))
 	return GPIOState(state), err
 }
 
 func (w *WINC) isr(signal <-chan bool) {
 	// Send the shutdown signal when this routine eventually returns
-	defer func() { isrShutdownSignal <- true }()
+	defer func() { w.isrShutdownSignal <- true }()
 
 	// Loop forever until the driver is reset
 	for {
@@ -165,23 +181,20 @@ func (w *WINC) isr(signal <-chan bool) {
 		case state := <-signal: // Wait for the signal from the interrupt
 			if !state {
 				// Stop this goroutine
-				println("(", time.Now().String(), ") Shutting down ISR")
 				return
 			}
 
 			// Wake the chip
-			err := hif.ChipWake()
+			err := w.hif.ChipWake()
 
 			if err == nil {
 				// Handle the interrupt
-				err = hif.Isr()
-
+				err = w.hif.Isr()
 				if err != nil {
 					println(err.Error())
 				}
-
 				// Sleep the chip
-				if err = hif.ChipSleep(); err != nil {
+				if err = w.hif.ChipSleep(); err != nil {
 					println(err.Error())
 				}
 			} else {
@@ -191,9 +204,9 @@ func (w *WINC) isr(signal <-chan bool) {
 	}
 }
 
-func IrqHandler(hal.Pin) {
+func (w *WINC) IrqHandler(hal.Pin) {
 	select {
-	case isrSignal <- true:
+	case w.isrSignal <- true:
 	// Unblock the interrupt service (go)routine
 	default:
 		return

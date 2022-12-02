@@ -90,10 +90,7 @@ func (hif *Hif) Init() (err error) {
 	if chipId, err := hif.GetChipId(); err != nil {
 		return err
 	} else if (chipId >> 16) != 0x15 { // TODO: Allow WINC3400
-		println(chipId)
 		return errIncompatibleVersion
-	} else {
-		println("WINC: Chip id is", chipId)
 	}
 
 	if err = hif.waitForBootrom(); err != nil {
@@ -112,19 +109,13 @@ func (hif *Hif) Init() (err error) {
 }
 
 func (hif *Hif) Shutdown() {
-	println("HIF: Shutting down HIF...")
 	// Close all event channels
 	for _, e := range hif.eventChannels {
-		println("HIF: Attempting to drain event channel...")
 		select {
 		case <-e: // Drain the channel
-			println("HIF: Drained. Attempting to close event channel...")
 			close(e)
-			println("HIF: Closed")
 		default: // The channel is already drained
-			println("HIF: Attempting to close event channel...")
 			close(e)
-			println("HIF: Closed")
 		}
 	}
 
@@ -132,7 +123,6 @@ func (hif *Hif) Shutdown() {
 	rxAddress = 0
 	rxDone = 0
 	chipId = 0
-	println("HIF: HIF shutdown complete")
 }
 
 func (hif *Hif) RegisterCallback(group GroupId, callback IsrCallback) {
@@ -152,9 +142,12 @@ func (hif *Hif) OpenEventChannel() <-chan Event {
 }
 
 func (hif *Hif) ChipWake() (err error) {
-	//hif.mutex.Lock()
-	//defer hif.mutex.Unlock()
+	hif.mutex.Lock()
+	defer hif.mutex.Unlock()
+	return hif.chipWakeInternal()
+}
 
+func (hif *Hif) chipWakeInternal() (err error) {
 	if volatile.LoadUint8(&rxDone) != 0 {
 		// Chip already wake
 		return nil
@@ -163,11 +156,9 @@ func (hif *Hif) ChipWake() (err error) {
 	if err = hif.t.writeRegister(_HOST_CORT_COMM, _NBIT0); err != nil {
 		return err
 	}
-
 	if err = hif.t.writeRegister(_WAKE_CLOCK_REG, _NBIT1); err != nil {
 		return err
 	}
-
 	time.Sleep(time.Millisecond * 3)
 
 	// Receive clock enabled register until bit 2 is 1
@@ -177,7 +168,7 @@ func (hif *Hif) ChipWake() (err error) {
 			return err
 		} else if reg&_NBIT2 != 0 {
 			// Reset the bus
-			hif.t.reset()
+			//hif.t.reset()
 
 			return nil
 		}
@@ -190,9 +181,12 @@ func (hif *Hif) ChipWake() (err error) {
 }
 
 func (hif *Hif) ChipSleep() error {
-	//hif.mutex.Lock()
-	//defer hif.mutex.Unlock()
+	hif.mutex.Lock()
+	defer hif.mutex.Unlock()
+	return hif.chipSleepInternal()
+}
 
+func (hif *Hif) chipSleepInternal() error {
 	for {
 		result, err := hif.t.readRegister(_CORT_HOST_COMM)
 		if err != nil {
@@ -327,7 +321,7 @@ func (hif *Hif) Send(group GroupId, opcode OpcodeId, control, data []byte, offse
 
 	if length <= _hifMaxPacketSize {
 		// Wake the client device
-		if err = hif.ChipWake(); err != nil {
+		if err = hif.chipWakeInternal(); err != nil {
 			return err
 		}
 
@@ -426,7 +420,7 @@ func (hif *Hif) Send(group GroupId, opcode OpcodeId, control, data []byte, offse
 			}
 		} else {
 			// Put the client device back to sleep and fail
-			if err = hif.ChipSleep(); err != nil {
+			if err = hif.chipSleepInternal(); err != nil {
 				return
 			}
 
@@ -436,7 +430,7 @@ func (hif *Hif) Send(group GroupId, opcode OpcodeId, control, data []byte, offse
 		return errMessageTooLong
 	}
 
-	return hif.ChipSleep()
+	return hif.chipSleepInternal()
 }
 
 func (hif *Hif) waitForBootrom() error {
