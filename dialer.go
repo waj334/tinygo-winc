@@ -1,12 +1,17 @@
 package winc
 
 import (
+	"context"
 	"math"
 	"net"
 	"net/url"
 )
 
 func (w *WINC) Dial(network, address string) (conn net.Conn, err error) {
+	return w.DialContext(context.Background(), network, address)
+}
+
+func (w *WINC) DialContext(ctx context.Context, network, address string) (conn net.Conn, err error) {
 	var socket *Socket
 	var addr net.Addr
 	var ip uint32

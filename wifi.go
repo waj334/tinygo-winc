@@ -179,7 +179,7 @@ func (w *WINC) GetWifiState() WifiState {
 	return w.wifiState
 }
 
-func (w *WINC) GetConnectionInfo() (strConnInfo types.M2MConnInfo, err error) {
+func (w *WINC) GetConnectionInfo() (strConnInfo *types.M2MConnInfo, err error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
@@ -191,7 +191,7 @@ func (w *WINC) GetConnectionInfo() (strConnInfo types.M2MConnInfo, err error) {
 	// Wait for reply
 	select {
 	case reply := <-w.callbackChan:
-		strConnInfo = reply.(types.M2MConnInfo)
+		strConnInfo = reply.(*types.M2MConnInfo)
 		w.pendingCallback = false
 	}
 
@@ -201,7 +201,7 @@ func (w *WINC) GetConnectionInfo() (strConnInfo types.M2MConnInfo, err error) {
 func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (data any, err error) {
 	switch id {
 	case OpcodeWifiRespGetSysTime:
-		var strSysTime types.SystemTime
+		strSysTime := &types.SystemTime{}
 		if err = w.hif.Receive(address, strSysTime.Bytes(), false); err != nil {
 			return
 		}
@@ -211,7 +211,7 @@ func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (da
 
 		data = strSysTime
 	case OpcodeWifiReqDhcpConf:
-		var strIpConfig types.M2MIPConfig
+		strIpConfig := &types.M2MIPConfig{}
 		if err = w.hif.Receive(address, strIpConfig.Bytes(), false); err != nil {
 			return
 		}
@@ -226,7 +226,7 @@ func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (da
 
 		data = strIpConfig
 	case OpcodeWifiRespConStateChanged:
-		var strState types.M2mWifiStateChanged
+		strState := &types.M2mWifiStateChanged{}
 		if err = w.hif.Receive(address, strState.Bytes(), false); err != nil {
 			return
 		}
@@ -237,7 +237,7 @@ func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (da
 		w.wifiState = WifiState(strState.U8CurrState)
 		data = strState
 	case OpcodeWifiRespConnInfo:
-		var strConnInfo types.M2MConnInfo
+		strConnInfo := &types.M2MConnInfo{}
 		if err = w.hif.Receive(address, strConnInfo.Bytes(), false); err != nil {
 			return
 		}
@@ -252,7 +252,7 @@ func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (da
 	return
 }
 
-func SysTimeToDate(strSysTime types.SystemTime) time.Time {
+func SysTimeToDate(strSysTime *types.SystemTime) time.Time {
 	return time.Date(
 		int(strSysTime.U16Year),
 		time.Month(strSysTime.U8Month),

@@ -13,6 +13,7 @@ func (s *Socket) Read(b []byte) (n int, err error) {
 	}
 
 	n, err = s.Recv(b, s.recvDeadline)
+
 	if err == ErrSocketTimeout {
 		err = os.ErrDeadlineExceeded
 	} else if err == ErrSocketConnAborted {

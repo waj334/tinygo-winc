@@ -191,10 +191,10 @@ func (s *Socket) Listen(backlog int) (err error) {
 	s.mutex.Lock()
 
 	// Wait for WINC to accept the incoming connection
-	var strListenReply types.ListenReply
+	var strListenReply *types.ListenReply
 	select {
 	case reply := <-replyChan:
-		strListenReply = reply.(types.ListenReply)
+		strListenReply = reply.(*types.ListenReply)
 	}
 
 	if strListenReply.S8Status < 0 {
@@ -244,10 +244,10 @@ func (s *Socket) Bind(addr net.Addr) (err error) {
 		return
 	}
 
-	var strBindReply types.BindReply
+	var strBindReply *types.BindReply
 	select {
 	case reply := <-replyChan:
-		strBindReply = reply.(types.BindReply)
+		strBindReply = reply.(*types.BindReply)
 	}
 
 	if strBindReply.S8Status < 0 {
@@ -302,12 +302,12 @@ func (s *Socket) Connect(addr net.Addr) (err error) {
 		return
 	}
 
-	var strConnectReply types.ConnectReply
+	var strConnectReply *types.ConnectReply
 
 	// Wait for the response
 	select {
 	case reply := <-replyChan:
-		strConnectReply = reply.(types.ConnectReply)
+		strConnectReply = reply.(*types.ConnectReply)
 	}
 
 	if strConnectReply.S8Error != 0 {
@@ -377,10 +377,10 @@ func (s *Socket) Secure() (err error) {
 	}
 
 	// Wait for the response
-	var strConnectReply types.ConnectReply
+	var strConnectReply *types.ConnectReply
 	select {
 	case reply := <-replyChan:
-		strConnectReply = reply.(types.ConnectReply)
+		strConnectReply = reply.(*types.ConnectReply)
 	}
 
 	if strConnectReply.S8Error < 0 {
@@ -485,18 +485,18 @@ func (s *Socket) Send(buf []byte, deadline time.Time) (sz int, err error) {
 		return 0, ErrSocketBufferFull
 	}
 
-	var strSendReply types.SendReply
+	var strSendReply *types.SendReply
 
 	// Wait for the response
 	if s.sendDeadline.IsZero() {
 		select {
 		case reply := <-replyChan:
-			strSendReply = reply.(types.SendReply)
+			strSendReply = reply.(*types.SendReply)
 		}
 	} else {
 		select {
 		case reply := <-replyChan:
-			strSendReply = reply.(types.SendReply)
+			strSendReply = reply.(*types.SendReply)
 		case <-time.After(s.sendDeadline.Sub(time.Now())):
 			s.callbackChan.Delete(strSend.U16SessionID)
 			return 0, ErrSocketTimeout
@@ -548,18 +548,18 @@ func (s *Socket) SendTo(buf []byte, addr net.Addr, deadline time.Time) (sz int, 
 		return 0, ErrSocketBufferFull
 	}
 
-	var strSendReply types.SendReply
+	var strSendReply *types.SendReply
 
 	// Wait for the response
 	if s.sendDeadline.IsZero() {
 		select {
 		case reply := <-replyChan:
-			strSendReply = reply.(types.SendReply)
+			strSendReply = reply.(*types.SendReply)
 		}
 	} else {
 		select {
 		case reply := <-replyChan:
-			strSendReply = reply.(types.SendReply)
+			strSendReply = reply.(*types.SendReply)
 		case <-time.After(s.sendDeadline.Sub(time.Now())):
 			s.callbackChan.Delete(strSend.U16SessionID)
 			return 0, ErrSocketTimeout
@@ -587,7 +587,7 @@ func (s *Socket) Recv(buf []byte, deadline time.Time) (sz int, err error) {
 	var timeout uint32
 	if !deadline.IsZero() {
 		timeout = uint32(deadline.Sub(time.Now()).Milliseconds())
-		if timeout <= 0 {
+		if timeout < 0 {
 			timeout = 0
 		}
 	} else {
@@ -624,10 +624,10 @@ func (s *Socket) Recv(buf []byte, deadline time.Time) (sz int, err error) {
 			}
 
 			// Wait for the reply
-			var strRecvReply types.RecvReply
+			var strRecvReply *types.RecvReply
 			select {
 			case reply := <-replyChan:
-				strRecvReply = reply.(types.RecvReply)
+				strRecvReply = reply.(*types.RecvReply)
 				close(replyChan)
 			}
 
@@ -652,6 +652,10 @@ func (s *Socket) Recv(buf []byte, deadline time.Time) (sz int, err error) {
 
 		sz += receiveLen
 		remaining -= receiveLen
+
+		// Set timeout to half a second so that receiving can be terminated in the event that the input buffer is larger
+		// than the incoming data.
+		timeout = 500
 	}
 
 	return
@@ -711,12 +715,12 @@ func (s *Socket) RecvFrom(buf []byte, addr net.Addr, deadline time.Time) (sz int
 				return
 			}
 
-			var strRecvReply types.RecvReply
+			var strRecvReply *types.RecvReply
 
 			// Wait for reply
 			select {
 			case reply := <-replyChan:
-				strRecvReply = reply.(types.RecvReply)
+				strRecvReply = reply.(*types.RecvReply)
 				close(replyChan)
 			}
 
@@ -740,6 +744,10 @@ func (s *Socket) RecvFrom(buf []byte, addr net.Addr, deadline time.Time) (sz int
 
 		sz += receiveLen
 		remaining -= receiveLen
+
+		// Set timeout to half a second so that receiving can be terminated in the event that the input buffer is larger
+		// than the incoming data.
+		timeout = 500
 	}
 
 	return
@@ -829,7 +837,7 @@ func (w *WINC) GetHostByName(hostname string) (address uint32, err error) {
 
 		select {
 		case reply := <-w.callbackChan:
-			strDnsReply := reply.(types.DnsReply)
+			strDnsReply := reply.(*types.DnsReply)
 			address = strDnsReply.U32HostIP
 		}
 	}
@@ -850,7 +858,7 @@ func (w *WINC) getSessionId() (id uint16) {
 func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (data any, err error) {
 	switch id {
 	case OpcodeSocketAccept:
-		var strAcceptReply types.AcceptReply
+		strAcceptReply := &types.AcceptReply{}
 		if err = w.hif.Receive(address, strAcceptReply.Bytes(), false); err != nil {
 			return
 		}
@@ -891,7 +899,7 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 
 		data = strAcceptReply
 	case OpcodeSocketBind, OpcodeSocketSslBind:
-		var strBindReply types.BindReply
+		strBindReply := &types.BindReply{}
 		if err = w.hif.Receive(address, strBindReply.Bytes(), false); err != nil {
 			return
 		}
@@ -907,7 +915,7 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 
 		data = strBindReply
 	case OpcodeSocketConnect, OpcodeSocketSslConnect:
-		var strConnectReply types.ConnectReply
+		strConnectReply := &types.ConnectReply{}
 		if err = w.hif.Receive(address, strConnectReply.Bytes(), false); err != nil {
 			return
 		}
@@ -924,7 +932,7 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 
 		data = strConnectReply
 	case OpcodeSocketListen:
-		var strListenReply types.ListenReply
+		strListenReply := &types.ListenReply{}
 		if err = w.hif.Receive(address, strListenReply.Bytes(), false); err != nil {
 			return
 		}
@@ -940,7 +948,7 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 
 		data = strListenReply
 	case OpcodeSocketRecv, OpcodeSocketSslRecv, OpcodeSocketRecvFrom:
-		var strRecvReply types.RecvReply
+		strRecvReply := &types.RecvReply{}
 		if err = w.hif.Receive(address, strRecvReply.Bytes(), false); err != nil {
 			return
 		}
@@ -964,7 +972,7 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 			return nil, ErrSocketDoesNotExist
 		}
 	case OpcodeSocketSend, OpcodeSocketSslSend, OpcodeSocketSendTo:
-		var strSendReply types.SendReply
+		strSendReply := &types.SendReply{}
 		if err = w.hif.Receive(address, strSendReply.Bytes(), false); err != nil {
 			return
 		}
@@ -980,7 +988,7 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 
 		data = strSendReply
 	case OpcodeSocketDnsResolve:
-		var strDnsReply types.DnsReply
+		strDnsReply := &types.DnsReply{}
 		if err = w.hif.Receive(address, strDnsReply.Bytes(), false); err != nil {
 			return
 		}
