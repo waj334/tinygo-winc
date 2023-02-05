@@ -25,12 +25,12 @@ SOFTWARE.
 package winc
 
 import (
+	"bytes"
 	"encoding/binary"
-	"github.com/waj334/tinygo-winc/debug"
 	"time"
 
+	"github.com/waj334/tinygo-winc/debug"
 	"github.com/waj334/tinygo-winc/protocol"
-	"github.com/waj334/tinygo-winc/protocol/types"
 )
 
 // Wifi opcodes
@@ -128,7 +128,7 @@ func (w *WINC) WifiConnectPsk(settings WifiConnectionSettings) (err error) {
 	debug.DEBUG("WIFI: WifiConnectPsk - BEGIN")
 	defer debug.DEBUG("WIFI: WifiConnectPsk - END")
 
-	opcode := protocol.OpcodeId(types.M2M_WIFI_REQ_CONN)
+	opcode := OpcodeWifiReqConn
 	var data []byte
 
 	if settings.Security == 0 {
@@ -145,53 +145,40 @@ func (w *WINC) WifiConnectPsk(settings WifiConnectionSettings) (err error) {
 			return ErrInvalidParameter
 		}
 
-		opcode |= protocol.OpcodeId(types.M2M_REQ_DATA_PKT)
+		opcode |= protocol.OpcodeReqDataPkt
 
-		psk := types.M2mWifiPsk{
-			U8PassphraseLen: uint8(len(settings.Passphrase)),
+		// TODO: Handle PSK - 2
+
+		credentials := wifiPsk{
+			passphrase: []byte(settings.Passphrase),
+			psk:        nil,
+			pskValue:   0,
 		}
 
-		copy(psk.Au8Passphrase[:], settings.Passphrase)
-		data = psk.Bytes()
-
-		debug.DEBUG("WIFI: psk.psk.Au8Psk: %v", psk.Au8Psk)
-		debug.DEBUG("WIFI: psk.U8PskCalculated: %v", psk.U8PskCalculated)
-		// TODO: Don't print the passphrase
-		debug.DEBUG("WIFI: psk.Au8Passphrase: %v", string(psk.Au8Passphrase[:]))
-		debug.DEBUG("WIFI: psk.U8PassphraseLen: %v", psk.U8PassphraseLen)
+		dataBuf := bytes.NewBuffer(make([]byte, 0, 108))
+		credentials.write(dataBuf)
+		data = dataBuf.Bytes()
 	}
 
-	// TODO: Handle PSK - 2
+	control := wifiConnectionHeader{
+		hdr: wifiConnectionCredentialsHeader{
+			credentialsSize: 152,
+			storageFlags:    byte(settings.Storage),
+			channel:         byte(settings.Channel),
+		},
+		cmn: wifiConnectionCredentialsCommon{
+			ssid:     []byte(settings.Ssid),
+			options:  0, //TODO
+			bssid:    settings.Bssid[:],
+			authType: byte(settings.Security),
+		},
+	}
 
-	var connHdr types.M2mWifiConnHdr
-
-	//NOTE: Set up common credentials first since the Bytes() call in determining the length locks in the values.
-	copy(connHdr.StrConnCredCmn.Au8Ssid[:], settings.Ssid)
-	connHdr.StrConnCredCmn.U8SsidLen = uint8(len(settings.Ssid))
-	connHdr.StrConnCredCmn.U8AuthType = uint8(settings.Security)
-	connHdr.StrConnCredCmn.U8Options = uint8(0) // TODO
-	connHdr.StrConnCredCmn.Au8Bssid = settings.Bssid
-
-	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.Au8Ssid: %v", string(connHdr.StrConnCredCmn.Au8Ssid[:]))
-	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.U8SsidLen: %v", connHdr.StrConnCredCmn.U8SsidLen)
-	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.U8AuthType: %v", connHdr.StrConnCredCmn.U8AuthType)
-	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.U8Options: %v", connHdr.StrConnCredCmn.U8Options)
-	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.Au8Bssid: %v", connHdr.StrConnCredCmn.Au8Bssid)
-
-	connHdr.StrConnCredHdr.U8CredStoreFlags = byte(settings.Storage)
-	connHdr.StrConnCredHdr.U8Channel = byte(settings.Channel)
-	connHdr.StrConnCredHdr.U16CredSize = uint16(len(data) + len(connHdr.StrConnCredCmn.Bytes()))
-
-	debug.DEBUG("WIFI: connHdr.StrConnCredHdr.U8CredStoreFlags: %v", byte(settings.Storage))
-	debug.DEBUG("WIFI: connHdr.StrConnCredHdr.U8Channel: %v", byte(settings.Channel))
-	debug.DEBUG("WIFI: connHdr.StrConnCredHdr.U16CredSize: %v", connHdr.StrConnCredHdr.U16CredSize)
-
-	control := connHdr.Bytes()
+	controlBuf := bytes.NewBuffer(make([]byte, 0, 48))
+	control.write(controlBuf)
 
 	// Send the HIF command
-	debug.DEBUG("WIFI: control length: %v", len(control))
-	debug.DEBUG("WIFI: data length: %v", len(data))
-	if err = w.hif.Send(GroupWIFI, opcode, control, data, uint16(len(control))); err != nil {
+	if err = w.hif.Send(GroupWIFI, opcode, controlBuf.Bytes(), data, uint16(controlBuf.Len())); err != nil {
 		return
 	}
 
@@ -212,11 +199,10 @@ func (w *WINC) GetWifiState() WifiState {
 	return w.wifiState
 }
 
-func (w *WINC) GetConnectionInfo() (strConnInfo *types.M2MConnInfo, err error) {
+func (w *WINC) GetConnectionInfo() (strConnInfo *WifiConnectionInfo, err error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	w.pendingCallback = true
 	if err = w.hif.Send(GroupWIFI, OpcodeWifiReqGetConnInfo, nil, nil, 0); err != nil {
 		return
 	}
@@ -224,75 +210,74 @@ func (w *WINC) GetConnectionInfo() (strConnInfo *types.M2MConnInfo, err error) {
 	// Wait for reply
 	select {
 	case reply := <-w.callbackChan:
-		strConnInfo = reply.(*types.M2MConnInfo)
-		w.pendingCallback = false
+		strConnInfo = reply.(*WifiConnectionInfo)
 	}
 
 	return
 }
 
-func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (data any, err error) {
+func (w *WINC) wifiCallback(id protocol.OpcodeId, sz uint16, address uint32) (obj any, err error) {
 	switch id {
 	case OpcodeWifiRespGetSysTime:
-		strSysTime := &types.SystemTime{}
-		if err = w.hif.Receive(address, strSysTime.Bytes(), false); err != nil {
+		data := make([]byte, 8)
+		if err = w.hif.Receive(address, data, false); err != nil {
 			return
 		}
 
-		strSysTime.Deref()
-		strSysTime.Free()
+		strSysTime := &SystemTime{}
+		strSysTime.read(data)
 
-		data = strSysTime
+		obj = strSysTime
 	case OpcodeWifiReqDhcpConf:
-		strIpConfig := &types.M2MIPConfig{}
-		if err = w.hif.Receive(address, strIpConfig.Bytes(), false); err != nil {
+		data := make([]byte, 24)
+		if err = w.hif.Receive(address, data, false); err != nil {
 			return
 		}
 
-		strIpConfig.Deref()
-		strIpConfig.Free()
+		strIpConfig := &IpConfig{}
+		strIpConfig.read(data)
 
 		w.ipAddr.IP = make([]byte, 4)
 		w.ipAddr.Mask = make([]byte, 4)
-		binary.BigEndian.PutUint32(w.ipAddr.IP, strIpConfig.U32StaticIP)
-		binary.BigEndian.PutUint32(w.ipAddr.Mask, strIpConfig.U32SubnetMask)
+		binary.BigEndian.PutUint32(w.ipAddr.IP, strIpConfig.StaticIP)
+		binary.BigEndian.PutUint32(w.ipAddr.Mask, strIpConfig.SubnetMask)
 
-		data = strIpConfig
+		obj = strIpConfig
 	case OpcodeWifiRespConStateChanged:
-		strState := &types.M2mWifiStateChanged{}
-		if err = w.hif.Receive(address, strState.Bytes(), false); err != nil {
+		data := make([]byte, 4)
+		if err = w.hif.Receive(address, data, false); err != nil {
 			return
 		}
 
-		strState.Deref()
-		strState.Free()
+		strState := &WifiStateChanged{}
+		strState.read(data)
 
-		w.wifiState = WifiState(strState.U8CurrState)
-		data = strState
+		w.wifiState = WifiState(strState.CurrentState)
+		obj = strState
 	case OpcodeWifiRespConnInfo:
-		strConnInfo := &types.M2MConnInfo{}
-		if err = w.hif.Receive(address, strConnInfo.Bytes(), false); err != nil {
+		data := make([]byte, 48)
+		if err = w.hif.Receive(address, data, false); err != nil {
 			return
 		}
 
-		strConnInfo.Deref()
-		strConnInfo.Free()
+		strConnInfo := &WifiConnectionInfo{}
+		strConnInfo.read(data)
 
 		w.callbackChan <- strConnInfo
-		data = strConnInfo
+		obj = strConnInfo
 	}
 
 	return
 }
 
-func SysTimeToDate(strSysTime *types.SystemTime) time.Time {
+func SysTimeToDate(strSysTime *SystemTime) time.Time {
 	return time.Date(
-		int(strSysTime.U16Year),
-		time.Month(strSysTime.U8Month),
-		int(strSysTime.U8Day),
-		int(strSysTime.U8Hour),
-		int(strSysTime.U8Minute),
-		int(strSysTime.U8Second),
+		int(strSysTime.Year),
+		time.Month(strSysTime.Month),
+		int(strSysTime.Day),
+		int(strSysTime.Hour),
+		int(strSysTime.Minute),
+		int(strSysTime.Second),
 		0,
 		time.UTC,
 	)

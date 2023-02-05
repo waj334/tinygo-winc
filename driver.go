@@ -56,8 +56,6 @@ type WINC struct {
 
 	callbackChan chan any
 
-	pendingCallback bool
-
 	sockets             [maxSocket]*Socket
 	sessionCounterMutex sync.Mutex
 	sessionCounter      uint16
