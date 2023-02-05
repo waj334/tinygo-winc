@@ -26,6 +26,7 @@ package winc
 
 import (
 	"encoding/binary"
+	"github.com/waj334/tinygo-winc/debug"
 	"time"
 
 	"github.com/waj334/tinygo-winc/protocol"
@@ -117,48 +118,80 @@ type WifiConnectionSettings struct {
 	Channel    WifiChannel
 	Passphrase string
 	Storage    WifiCredOption
-	security   WifiSecurityType
+	Security   WifiSecurityType
 }
 
 func (w *WINC) WifiConnectPsk(settings WifiConnectionSettings) (err error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	settings.security = WifiSecurityWpaPsk
+	debug.DEBUG("WIFI: WifiConnectPsk - BEGIN")
+	defer debug.DEBUG("WIFI: WifiConnectPsk - END")
+
+	opcode := protocol.OpcodeId(types.M2M_WIFI_REQ_CONN)
+	var data []byte
+
+	if settings.Security == 0 {
+		// Default to WPA
+		settings.Security = WifiSecurityWpaPsk
+	}
+
 	if len(settings.Ssid) == 0 {
 		return ErrInvalidParameter
 	}
 
-	if len(settings.Passphrase) == 0 || len(settings.Passphrase) > 64 {
-		return ErrInvalidParameter
+	if settings.Security != WifiSecurityOpen {
+		if len(settings.Passphrase) == 0 || len(settings.Passphrase) >= 64 {
+			return ErrInvalidParameter
+		}
+
+		opcode |= protocol.OpcodeId(types.M2M_REQ_DATA_PKT)
+
+		psk := types.M2mWifiPsk{
+			U8PassphraseLen: uint8(len(settings.Passphrase)),
+		}
+
+		copy(psk.Au8Passphrase[:], settings.Passphrase)
+		data = psk.Bytes()
+
+		debug.DEBUG("WIFI: psk.psk.Au8Psk: %v", psk.Au8Psk)
+		debug.DEBUG("WIFI: psk.U8PskCalculated: %v", psk.U8PskCalculated)
+		// TODO: Don't print the passphrase
+		debug.DEBUG("WIFI: psk.Au8Passphrase: %v", string(psk.Au8Passphrase[:]))
+		debug.DEBUG("WIFI: psk.U8PassphraseLen: %v", psk.U8PassphraseLen)
 	}
 
 	// TODO: Handle PSK - 2
 
-	var ctrl types.M2mWifiConnHdr
-	ctrl.StrConnCredHdr.U8CredStoreFlags = byte(settings.Storage)
-	ctrl.StrConnCredHdr.U8Channel = byte(settings.Channel)
-	ctrl.StrConnCredHdr.U16CredSize = 44
+	var connHdr types.M2mWifiConnHdr
 
-	copy(ctrl.StrConnCredCmn.Au8Ssid[:], settings.Ssid)
-	ctrl.StrConnCredCmn.U8SsidLen = uint8(len(settings.Ssid))
-	ctrl.StrConnCredCmn.U8AuthType = uint8(settings.security)
-	ctrl.StrConnCredCmn.U8Options = uint8(0) // TODO
-	ctrl.StrConnCredCmn.Au8Bssid = settings.Bssid
+	//NOTE: Set up common credentials first since the Bytes() call in determining the length locks in the values.
+	copy(connHdr.StrConnCredCmn.Au8Ssid[:], settings.Ssid)
+	connHdr.StrConnCredCmn.U8SsidLen = uint8(len(settings.Ssid))
+	connHdr.StrConnCredCmn.U8AuthType = uint8(settings.Security)
+	connHdr.StrConnCredCmn.U8Options = uint8(0) // TODO
+	connHdr.StrConnCredCmn.Au8Bssid = settings.Bssid
 
-	psk := types.M2mWifiPsk{
-		U8PassphraseLen: uint8(len(settings.Passphrase)),
-	}
+	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.Au8Ssid: %v", string(connHdr.StrConnCredCmn.Au8Ssid[:]))
+	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.U8SsidLen: %v", connHdr.StrConnCredCmn.U8SsidLen)
+	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.U8AuthType: %v", connHdr.StrConnCredCmn.U8AuthType)
+	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.U8Options: %v", connHdr.StrConnCredCmn.U8Options)
+	debug.DEBUG("WIFI: connHdr.StrConnCredCmn.Au8Bssid: %v", connHdr.StrConnCredCmn.Au8Bssid)
 
-	copy(psk.Au8Passphrase[:], settings.Passphrase)
+	connHdr.StrConnCredHdr.U8CredStoreFlags = byte(settings.Storage)
+	connHdr.StrConnCredHdr.U8Channel = byte(settings.Channel)
+	connHdr.StrConnCredHdr.U16CredSize = uint16(len(data) + len(connHdr.StrConnCredCmn.Bytes()))
+
+	debug.DEBUG("WIFI: connHdr.StrConnCredHdr.U8CredStoreFlags: %v", byte(settings.Storage))
+	debug.DEBUG("WIFI: connHdr.StrConnCredHdr.U8Channel: %v", byte(settings.Channel))
+	debug.DEBUG("WIFI: connHdr.StrConnCredHdr.U16CredSize: %v", connHdr.StrConnCredHdr.U16CredSize)
+
+	control := connHdr.Bytes()
 
 	// Send the HIF command
-	if err = w.hif.Send(GroupWIFI,
-		OpcodeWifiReqConn|protocol.OpcodeReqDataPkt,
-		ctrl.Bytes(),
-		psk.Bytes(),
-		uint16(len(ctrl.Bytes())),
-	); err != nil {
+	debug.DEBUG("WIFI: control length: %v", len(control))
+	debug.DEBUG("WIFI: data length: %v", len(data))
+	if err = w.hif.Send(GroupWIFI, opcode, control, data, uint16(len(control))); err != nil {
 		return
 	}
 

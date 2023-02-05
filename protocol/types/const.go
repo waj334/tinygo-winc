@@ -8,12 +8,22 @@ package types
 #include "../include/socket.h"
 #include "../include/m2m_socket_host_if.h"
 #include "../include/m2m_hif.h"
+#include "../include/ecc_types.h"
+#include "../include/wdrv_winc_ssl.h"
 #include <stdlib.h>
 #include "cgo_helpers.h"
 */
 import "C"
 
 const (
+	// ECC_LARGEST_CURVE_SIZE as defined in include/ecc_types.h:49
+	ECC_LARGEST_CURVE_SIZE = (32)
+	// ECC_POINT_MAX_SIZE as defined in include/ecc_types.h:56
+	ECC_POINT_MAX_SIZE = 32
+	// ECC_POINT_MAX_SIZE_WORDS as defined in include/ecc_types.h:62
+	ECC_POINT_MAX_SIZE_WORDS = (ECC_POINT_MAX_SIZE / 4)
+	// ECC_NUM_SUPP_CURVES as defined in include/ecc_types.h:68
+	ECC_NUM_SUPP_CURVES = 0x5f3860
 	// M2M_HIF_MAX_PACKET_SIZE as defined in include/m2m_hif.h:50
 	M2M_HIF_MAX_PACKET_SIZE = (1600 - 4)
 	// M2M_HIF_HDR_OFFSET as defined in include/m2m_hif.h:65
@@ -160,6 +170,70 @@ const (
 	M2M_ERR_INVALID_ARG = -15
 	// M2M_ERR_INVALID as defined in include/nm_common.h:76
 	M2M_ERR_INVALID = -16
+	// NBIT31 as defined in include/nm_common.h:78
+	NBIT31 = (0x80000000)
+	// NBIT30 as defined in include/nm_common.h:79
+	NBIT30 = (0x40000000)
+	// NBIT29 as defined in include/nm_common.h:80
+	NBIT29 = (0x20000000)
+	// NBIT28 as defined in include/nm_common.h:81
+	NBIT28 = (0x10000000)
+	// NBIT27 as defined in include/nm_common.h:82
+	NBIT27 = (0x08000000)
+	// NBIT26 as defined in include/nm_common.h:83
+	NBIT26 = (0x04000000)
+	// NBIT25 as defined in include/nm_common.h:84
+	NBIT25 = (0x02000000)
+	// NBIT24 as defined in include/nm_common.h:85
+	NBIT24 = (0x01000000)
+	// NBIT23 as defined in include/nm_common.h:86
+	NBIT23 = (0x00800000)
+	// NBIT22 as defined in include/nm_common.h:87
+	NBIT22 = (0x00400000)
+	// NBIT21 as defined in include/nm_common.h:88
+	NBIT21 = (0x00200000)
+	// NBIT20 as defined in include/nm_common.h:89
+	NBIT20 = (0x00100000)
+	// NBIT19 as defined in include/nm_common.h:90
+	NBIT19 = (0x00080000)
+	// NBIT18 as defined in include/nm_common.h:91
+	NBIT18 = (0x00040000)
+	// NBIT17 as defined in include/nm_common.h:92
+	NBIT17 = (0x00020000)
+	// NBIT16 as defined in include/nm_common.h:93
+	NBIT16 = (0x00010000)
+	// NBIT15 as defined in include/nm_common.h:94
+	NBIT15 = (0x00008000)
+	// NBIT14 as defined in include/nm_common.h:95
+	NBIT14 = (0x00004000)
+	// NBIT13 as defined in include/nm_common.h:96
+	NBIT13 = (0x00002000)
+	// NBIT12 as defined in include/nm_common.h:97
+	NBIT12 = (0x00001000)
+	// NBIT11 as defined in include/nm_common.h:98
+	NBIT11 = (0x00000800)
+	// NBIT10 as defined in include/nm_common.h:99
+	NBIT10 = (0x00000400)
+	// NBIT9 as defined in include/nm_common.h:100
+	NBIT9 = (0x00000200)
+	// NBIT8 as defined in include/nm_common.h:101
+	NBIT8 = (0x00000100)
+	// NBIT7 as defined in include/nm_common.h:102
+	NBIT7 = (0x00000080)
+	// NBIT6 as defined in include/nm_common.h:103
+	NBIT6 = (0x00000040)
+	// NBIT5 as defined in include/nm_common.h:104
+	NBIT5 = (0x00000020)
+	// NBIT4 as defined in include/nm_common.h:105
+	NBIT4 = (0x00000010)
+	// NBIT3 as defined in include/nm_common.h:106
+	NBIT3 = (0x00000008)
+	// NBIT2 as defined in include/nm_common.h:107
+	NBIT2 = (0x00000004)
+	// NBIT1 as defined in include/nm_common.h:108
+	NBIT1 = (0x00000002)
+	// NBIT0 as defined in include/nm_common.h:109
+	NBIT0 = (0x00000001)
 	// SOL_SOCKET as defined in include/socket.h:146
 	SOL_SOCKET = 1
 	// SOL_SSL_SOCKET as defined in include/socket.h:152
@@ -203,37 +277,37 @@ const (
 	// SSL_ENABLE_ALL_SUITES as defined in include/socket.h:372
 	SSL_ENABLE_ALL_SUITES = 0x0000003F
 	// SSL_CIPHER_RSA_WITH_AES_128_CBC_SHA as defined in include/socket.h:386
-	SSL_CIPHER_RSA_WITH_AES_128_CBC_SHA = 0x5f3860
+	SSL_CIPHER_RSA_WITH_AES_128_CBC_SHA = NBIT0
 	// SSL_CIPHER_RSA_WITH_AES_128_CBC_SHA256 as defined in include/socket.h:387
-	SSL_CIPHER_RSA_WITH_AES_128_CBC_SHA256 = 0x5f3860
+	SSL_CIPHER_RSA_WITH_AES_128_CBC_SHA256 = NBIT1
 	// SSL_CIPHER_DHE_RSA_WITH_AES_128_CBC_SHA as defined in include/socket.h:388
-	SSL_CIPHER_DHE_RSA_WITH_AES_128_CBC_SHA = 0x5f3860
+	SSL_CIPHER_DHE_RSA_WITH_AES_128_CBC_SHA = NBIT2
 	// SSL_CIPHER_DHE_RSA_WITH_AES_128_CBC_SHA256 as defined in include/socket.h:389
-	SSL_CIPHER_DHE_RSA_WITH_AES_128_CBC_SHA256 = 0x5f3860
+	SSL_CIPHER_DHE_RSA_WITH_AES_128_CBC_SHA256 = NBIT3
 	// SSL_CIPHER_RSA_WITH_AES_128_GCM_SHA256 as defined in include/socket.h:390
-	SSL_CIPHER_RSA_WITH_AES_128_GCM_SHA256 = 0x5f3860
+	SSL_CIPHER_RSA_WITH_AES_128_GCM_SHA256 = NBIT4
 	// SSL_CIPHER_DHE_RSA_WITH_AES_128_GCM_SHA256 as defined in include/socket.h:391
-	SSL_CIPHER_DHE_RSA_WITH_AES_128_GCM_SHA256 = 0x5f3860
+	SSL_CIPHER_DHE_RSA_WITH_AES_128_GCM_SHA256 = NBIT5
 	// SSL_CIPHER_RSA_WITH_AES_256_CBC_SHA as defined in include/socket.h:392
-	SSL_CIPHER_RSA_WITH_AES_256_CBC_SHA = 0x5f3860
+	SSL_CIPHER_RSA_WITH_AES_256_CBC_SHA = NBIT6
 	// SSL_CIPHER_RSA_WITH_AES_256_CBC_SHA256 as defined in include/socket.h:393
-	SSL_CIPHER_RSA_WITH_AES_256_CBC_SHA256 = 0x5f3860
+	SSL_CIPHER_RSA_WITH_AES_256_CBC_SHA256 = NBIT7
 	// SSL_CIPHER_DHE_RSA_WITH_AES_256_CBC_SHA as defined in include/socket.h:394
-	SSL_CIPHER_DHE_RSA_WITH_AES_256_CBC_SHA = 0x5f3860
+	SSL_CIPHER_DHE_RSA_WITH_AES_256_CBC_SHA = NBIT8
 	// SSL_CIPHER_DHE_RSA_WITH_AES_256_CBC_SHA256 as defined in include/socket.h:395
-	SSL_CIPHER_DHE_RSA_WITH_AES_256_CBC_SHA256 = 0x5f3860
+	SSL_CIPHER_DHE_RSA_WITH_AES_256_CBC_SHA256 = NBIT9
 	// SSL_CIPHER_ECDHE_RSA_WITH_AES_128_CBC_SHA as defined in include/socket.h:396
-	SSL_CIPHER_ECDHE_RSA_WITH_AES_128_CBC_SHA = 0x5f3860
+	SSL_CIPHER_ECDHE_RSA_WITH_AES_128_CBC_SHA = NBIT10
 	// SSL_CIPHER_ECDHE_RSA_WITH_AES_256_CBC_SHA as defined in include/socket.h:397
-	SSL_CIPHER_ECDHE_RSA_WITH_AES_256_CBC_SHA = 0x5f3860
+	SSL_CIPHER_ECDHE_RSA_WITH_AES_256_CBC_SHA = NBIT11
 	// SSL_CIPHER_ECDHE_RSA_WITH_AES_128_CBC_SHA256 as defined in include/socket.h:398
-	SSL_CIPHER_ECDHE_RSA_WITH_AES_128_CBC_SHA256 = 0x5f3860
+	SSL_CIPHER_ECDHE_RSA_WITH_AES_128_CBC_SHA256 = NBIT12
 	// SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 as defined in include/socket.h:399
-	SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 = 0x5f3860
+	SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 = NBIT13
 	// SSL_CIPHER_ECDHE_RSA_WITH_AES_128_GCM_SHA256 as defined in include/socket.h:400
-	SSL_CIPHER_ECDHE_RSA_WITH_AES_128_GCM_SHA256 = 0x5f3860
+	SSL_CIPHER_ECDHE_RSA_WITH_AES_128_GCM_SHA256 = NBIT14
 	// SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 as defined in include/socket.h:401
-	SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = 0x5f3860
+	SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = NBIT15
 	// SSL_ECC_ONLY_CIPHERS as defined in include/socket.h:403
 	SSL_ECC_ONLY_CIPHERS = SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 | SSL_CIPHER_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
 	// SSL_ECC_ALL_CIPHERS as defined in include/socket.h:410
@@ -251,19 +325,487 @@ const (
 	// SSL_TX_PACKET_OFFSET as defined in include/socket.h:479
 	SSL_TX_PACKET_OFFSET = 0x5f3860
 	// SSL_FLAGS_ACTIVE as defined in include/socket.h:481
-	SSL_FLAGS_ACTIVE = 0x5f3860
+	SSL_FLAGS_ACTIVE = NBIT0
 	// SSL_FLAGS_BYPASS_X509 as defined in include/socket.h:482
-	SSL_FLAGS_BYPASS_X509 = 0x5f3860
+	SSL_FLAGS_BYPASS_X509 = NBIT1
 	// SSL_FLAGS_2_RESERVD as defined in include/socket.h:483
-	SSL_FLAGS_2_RESERVD = 0x5f3860
+	SSL_FLAGS_2_RESERVD = NBIT2
 	// SSL_FLAGS_3_RESERVD as defined in include/socket.h:484
-	SSL_FLAGS_3_RESERVD = 0x5f3860
+	SSL_FLAGS_3_RESERVD = NBIT3
 	// SSL_FLAGS_CACHE_SESSION as defined in include/socket.h:485
-	SSL_FLAGS_CACHE_SESSION = 0x5f3860
+	SSL_FLAGS_CACHE_SESSION = NBIT4
 	// SSL_FLAGS_NO_TX_COPY as defined in include/socket.h:486
-	SSL_FLAGS_NO_TX_COPY = 0x5f3860
+	SSL_FLAGS_NO_TX_COPY = NBIT5
 	// SSL_FLAGS_CHECK_SNI as defined in include/socket.h:487
-	SSL_FLAGS_CHECK_SNI = 0x5f3860
+	SSL_FLAGS_CHECK_SNI = NBIT6
 	// SSL_FLAGS_DELAY as defined in include/socket.h:488
-	SSL_FLAGS_DELAY = 0x5f3860
+	SSL_FLAGS_DELAY = NBIT7
 )
+
+// EnumEcNamedCurve as declared in include/ecc_types.h:106
+type EnumEcNamedCurve int32
+
+// EnumEcNamedCurve enumeration from include/ecc_types.h:106
+const (
+	EC_SECP192R1 EnumEcNamedCurve = C.EC_SECP192R1
+	EC_SECP256R1 EnumEcNamedCurve = C.EC_SECP256R1
+	EC_SECP384R1 EnumEcNamedCurve = C.EC_SECP384R1
+	EC_SECP521R1 EnumEcNamedCurve = C.EC_SECP521R1
+	EC_UNKNOWN   EnumEcNamedCurve = C.EC_UNKNOWN
+)
+
+// EnumEccREQ as declared in include/ecc_types.h:191
+type EnumEccREQ int32
+
+// EnumEccREQ enumeration from include/ecc_types.h:191
+const (
+	ECC_REQ_NONE        EnumEccREQ = C.ECC_REQ_NONE
+	ECC_REQ_CLIENT_ECDH EnumEccREQ = C.ECC_REQ_CLIENT_ECDH
+	ECC_REQ_SERVER_ECDH EnumEccREQ = C.ECC_REQ_SERVER_ECDH
+	ECC_REQ_GEN_KEY     EnumEccREQ = C.ECC_REQ_GEN_KEY
+	ECC_REQ_SIGN_GEN    EnumEccREQ = C.ECC_REQ_SIGN_GEN
+	ECC_REQ_SIGN_VERIFY EnumEccREQ = C.ECC_REQ_SIGN_VERIFY
+)
+
+// EnumFlashLUTEntryID as declared in include/m2m_types.h:515
+type EnumFlashLUTEntryID int32
+
+// EnumFlashLUTEntryID enumeration from include/m2m_types.h:515
+const ()
+
+// EnumM2mDefaultConnErrcode as declared in include/m2m_types.h:540
+type EnumM2mDefaultConnErrcode int32
+
+// EnumM2mDefaultConnErrcode enumeration from include/m2m_types.h:540
+const (
+	M2M_DEFAULT_CONN_INPROGRESS    EnumM2mDefaultConnErrcode = C.M2M_DEFAULT_CONN_INPROGRESS
+	M2M_DEFAULT_CONN_FAIL          EnumM2mDefaultConnErrcode = C.M2M_DEFAULT_CONN_FAIL
+	M2M_DEFAULT_CONN_SCAN_MISMATCH EnumM2mDefaultConnErrcode = C.M2M_DEFAULT_CONN_SCAN_MISMATCH
+	M2M_DEFAULT_CONN_EMPTY_LIST    EnumM2mDefaultConnErrcode = C.M2M_DEFAULT_CONN_EMPTY_LIST
+)
+
+// EnumM2mConnChangedErrcode as declared in include/m2m_types.h:565
+type EnumM2mConnChangedErrcode int32
+
+// EnumM2mConnChangedErrcode enumeration from include/m2m_types.h:565
+const (
+	M2M_ERR_SCAN_FAIL       EnumM2mConnChangedErrcode = C.M2M_ERR_SCAN_FAIL
+	M2M_ERR_JOIN_FAIL       EnumM2mConnChangedErrcode = C.M2M_ERR_JOIN_FAIL
+	M2M_ERR_AUTH_FAIL       EnumM2mConnChangedErrcode = C.M2M_ERR_AUTH_FAIL
+	M2M_ERR_ASSOC_FAIL      EnumM2mConnChangedErrcode = C.M2M_ERR_ASSOC_FAIL
+	M2M_ERR_CONN_INPROGRESS EnumM2mConnChangedErrcode = C.M2M_ERR_CONN_INPROGRESS
+)
+
+// EnumM2mWepKeyIndex as declared in include/m2m_types.h:580
+type EnumM2mWepKeyIndex int32
+
+// EnumM2mWepKeyIndex enumeration from include/m2m_types.h:580
+const (
+	M2M_WIFI_WEP_KEY_INDEX_1 EnumM2mWepKeyIndex = C.M2M_WIFI_WEP_KEY_INDEX_1
+	M2M_WIFI_WEP_KEY_INDEX_2 EnumM2mWepKeyIndex = C.M2M_WIFI_WEP_KEY_INDEX_2
+	M2M_WIFI_WEP_KEY_INDEX_3 EnumM2mWepKeyIndex = C.M2M_WIFI_WEP_KEY_INDEX_3
+	M2M_WIFI_WEP_KEY_INDEX_4 EnumM2mWepKeyIndex = C.M2M_WIFI_WEP_KEY_INDEX_4
+)
+
+// EnumM2mPwrMode as declared in include/m2m_types.h:598
+type EnumM2mPwrMode int32
+
+// EnumM2mPwrMode enumeration from include/m2m_types.h:598
+const ()
+
+// EnumM2mTxPwrLevel as declared in include/m2m_types.h:629
+type EnumM2mTxPwrLevel int32
+
+// EnumM2mTxPwrLevel enumeration from include/m2m_types.h:629
+const ()
+
+// EnumM2mReqGroup as declared in include/m2m_types.h:747
+type EnumM2mReqGroup int32
+
+// EnumM2mReqGroup enumeration from include/m2m_types.h:747
+const (
+	M2M_REQ_GROUP_MAIN     EnumM2mReqGroup = C.M2M_REQ_GROUP_MAIN
+	M2M_REQ_GROUP_WIFI     EnumM2mReqGroup = C.M2M_REQ_GROUP_WIFI
+	M2M_REQ_GROUP_IP       EnumM2mReqGroup = C.M2M_REQ_GROUP_IP
+	M2M_REQ_GROUP_HIF      EnumM2mReqGroup = C.M2M_REQ_GROUP_HIF
+	M2M_REQ_GROUP_OTA      EnumM2mReqGroup = C.M2M_REQ_GROUP_OTA
+	M2M_REQ_GROUP_SSL      EnumM2mReqGroup = C.M2M_REQ_GROUP_SSL
+	M2M_REQ_GROUP_CRYPTO   EnumM2mReqGroup = C.M2M_REQ_GROUP_CRYPTO
+	M2M_REQ_GROUP_SIGMA    EnumM2mReqGroup = C.M2M_REQ_GROUP_SIGMA
+	M2M_REQ_GROUP_INTERNAL EnumM2mReqGroup = C.M2M_REQ_GROUP_INTERNAL
+)
+
+// EnumM2mReqpkt as declared in include/m2m_types.h:758
+type EnumM2mReqpkt int32
+
+// EnumM2mReqpkt enumeration from include/m2m_types.h:758
+const (
+	M2M_REQ_CONFIG_PKT EnumM2mReqpkt = C.M2M_REQ_CONFIG_PKT
+	M2M_REQ_DATA_PKT   EnumM2mReqpkt = C.M2M_REQ_DATA_PKT
+)
+
+// EnumM2mConfigCmd as declared in include/m2m_types.h:905
+type EnumM2mConfigCmd int32
+
+// EnumM2mConfigCmd enumeration from include/m2m_types.h:905
+const (
+	M2M_WIFI_REQ_RESTART              EnumM2mConfigCmd = C.M2M_WIFI_REQ_RESTART
+	M2M_WIFI_REQ_SET_MAC_ADDRESS      EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_MAC_ADDRESS
+	M2M_WIFI_REQ_CURRENT_RSSI         EnumM2mConfigCmd = C.M2M_WIFI_REQ_CURRENT_RSSI
+	M2M_WIFI_RESP_CURRENT_RSSI        EnumM2mConfigCmd = C.M2M_WIFI_RESP_CURRENT_RSSI
+	M2M_WIFI_REQ_GET_CONN_INFO        EnumM2mConfigCmd = C.M2M_WIFI_REQ_GET_CONN_INFO
+	M2M_WIFI_RESP_CONN_INFO           EnumM2mConfigCmd = C.M2M_WIFI_RESP_CONN_INFO
+	M2M_WIFI_REQ_SET_DEVICE_NAME      EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_DEVICE_NAME
+	M2M_WIFI_REQ_START_PROVISION_MODE EnumM2mConfigCmd = C.M2M_WIFI_REQ_START_PROVISION_MODE
+	M2M_WIFI_RESP_PROVISION_INFO      EnumM2mConfigCmd = C.M2M_WIFI_RESP_PROVISION_INFO
+	M2M_WIFI_REQ_STOP_PROVISION_MODE  EnumM2mConfigCmd = C.M2M_WIFI_REQ_STOP_PROVISION_MODE
+	M2M_WIFI_REQ_SET_SYS_TIME         EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_SYS_TIME
+	M2M_WIFI_REQ_ENABLE_SNTP_CLIENT   EnumM2mConfigCmd = C.M2M_WIFI_REQ_ENABLE_SNTP_CLIENT
+	M2M_WIFI_REQ_DISABLE_SNTP_CLIENT  EnumM2mConfigCmd = C.M2M_WIFI_REQ_DISABLE_SNTP_CLIENT
+	M2M_WIFI_RESP_MEMORY_RECOVER      EnumM2mConfigCmd = C.M2M_WIFI_RESP_MEMORY_RECOVER
+	M2M_WIFI_REQ_CUST_INFO_ELEMENT    EnumM2mConfigCmd = C.M2M_WIFI_REQ_CUST_INFO_ELEMENT
+	M2M_WIFI_REQ_SCAN                 EnumM2mConfigCmd = C.M2M_WIFI_REQ_SCAN
+	M2M_WIFI_RESP_SCAN_DONE           EnumM2mConfigCmd = C.M2M_WIFI_RESP_SCAN_DONE
+	M2M_WIFI_REQ_SCAN_RESULT          EnumM2mConfigCmd = C.M2M_WIFI_REQ_SCAN_RESULT
+	M2M_WIFI_RESP_SCAN_RESULT         EnumM2mConfigCmd = C.M2M_WIFI_RESP_SCAN_RESULT
+	M2M_WIFI_REQ_SET_SCAN_OPTION      EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_SCAN_OPTION
+	M2M_WIFI_REQ_SET_SCAN_REGION      EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_SCAN_REGION
+	M2M_WIFI_REQ_SET_POWER_PROFILE    EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_POWER_PROFILE
+	M2M_WIFI_REQ_SET_TX_POWER         EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_TX_POWER
+	M2M_WIFI_REQ_SET_BATTERY_VOLTAGE  EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_BATTERY_VOLTAGE
+	M2M_WIFI_REQ_SET_ENABLE_LOGS      EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_ENABLE_LOGS
+	M2M_WIFI_REQ_GET_SYS_TIME         EnumM2mConfigCmd = C.M2M_WIFI_REQ_GET_SYS_TIME
+	M2M_WIFI_RESP_GET_SYS_TIME        EnumM2mConfigCmd = C.M2M_WIFI_RESP_GET_SYS_TIME
+	M2M_WIFI_REQ_SEND_ETHERNET_PACKET EnumM2mConfigCmd = C.M2M_WIFI_REQ_SEND_ETHERNET_PACKET
+	M2M_WIFI_RESP_ETHERNET_RX_PACKET  EnumM2mConfigCmd = C.M2M_WIFI_RESP_ETHERNET_RX_PACKET
+	M2M_WIFI_REQ_SET_MAC_MCAST        EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_MAC_MCAST
+	M2M_WIFI_REQ_GET_PRNG             EnumM2mConfigCmd = C.M2M_WIFI_REQ_GET_PRNG
+	M2M_WIFI_RESP_GET_PRNG            EnumM2mConfigCmd = C.M2M_WIFI_RESP_GET_PRNG
+	M2M_WIFI_REQ_SCAN_SSID_LIST       EnumM2mConfigCmd = C.M2M_WIFI_REQ_SCAN_SSID_LIST
+	M2M_WIFI_REQ_SET_GAINS            EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_GAINS
+	M2M_WIFI_REQ_PASSIVE_SCAN         EnumM2mConfigCmd = C.M2M_WIFI_REQ_PASSIVE_SCAN
+	M2M_WIFI_REQ_CONG_AUTO_RATE       EnumM2mConfigCmd = C.M2M_WIFI_REQ_CONG_AUTO_RATE
+	M2M_WIFI_REQ_CONFIG_SNTP          EnumM2mConfigCmd = C.M2M_WIFI_REQ_CONFIG_SNTP
+	M2M_WIFI_REQ_SET_GAIN_TABLE_IDX   EnumM2mConfigCmd = C.M2M_WIFI_REQ_SET_GAIN_TABLE_IDX
+	M2M_WIFI_REQRSP_DELETE_APID       EnumM2mConfigCmd = C.M2M_WIFI_REQRSP_DELETE_APID
+	M2M_WIFI_MAX_CONFIG_ALL           EnumM2mConfigCmd = C.M2M_WIFI_MAX_CONFIG_ALL
+)
+
+// EnumM2mStaCmd as declared in include/m2m_types.h:987
+type EnumM2mStaCmd int32
+
+// EnumM2mStaCmd enumeration from include/m2m_types.h:987
+const (
+	M2M_WIFI_REQ_CONNECT            EnumM2mStaCmd = C.M2M_WIFI_REQ_CONNECT
+	M2M_WIFI_REQ_DEFAULT_CONNECT    EnumM2mStaCmd = C.M2M_WIFI_REQ_DEFAULT_CONNECT
+	M2M_WIFI_RESP_DEFAULT_CONNECT   EnumM2mStaCmd = C.M2M_WIFI_RESP_DEFAULT_CONNECT
+	M2M_WIFI_REQ_DISCONNECT         EnumM2mStaCmd = C.M2M_WIFI_REQ_DISCONNECT
+	M2M_WIFI_RESP_CON_STATE_CHANGED EnumM2mStaCmd = C.M2M_WIFI_RESP_CON_STATE_CHANGED
+	M2M_WIFI_REQ_SLEEP              EnumM2mStaCmd = C.M2M_WIFI_REQ_SLEEP
+	M2M_WIFI_REQ_WPS_SCAN           EnumM2mStaCmd = C.M2M_WIFI_REQ_WPS_SCAN
+	M2M_WIFI_REQ_WPS                EnumM2mStaCmd = C.M2M_WIFI_REQ_WPS
+	M2M_WIFI_REQ_START_WPS          EnumM2mStaCmd = C.M2M_WIFI_REQ_START_WPS
+	M2M_WIFI_REQ_DISABLE_WPS        EnumM2mStaCmd = C.M2M_WIFI_REQ_DISABLE_WPS
+	M2M_WIFI_REQ_DHCP_CONF          EnumM2mStaCmd = C.M2M_WIFI_REQ_DHCP_CONF
+	M2M_WIFI_RESP_IP_CONFIGURED     EnumM2mStaCmd = C.M2M_WIFI_RESP_IP_CONFIGURED
+	M2M_WIFI_RESP_IP_CONFLICT       EnumM2mStaCmd = C.M2M_WIFI_RESP_IP_CONFLICT
+	M2M_WIFI_REQ_ENABLE_MONITORING  EnumM2mStaCmd = C.M2M_WIFI_REQ_ENABLE_MONITORING
+	M2M_WIFI_REQ_DISABLE_MONITORING EnumM2mStaCmd = C.M2M_WIFI_REQ_DISABLE_MONITORING
+	M2M_WIFI_RESP_WIFI_RX_PACKET    EnumM2mStaCmd = C.M2M_WIFI_RESP_WIFI_RX_PACKET
+	M2M_WIFI_REQ_SEND_WIFI_PACKET   EnumM2mStaCmd = C.M2M_WIFI_REQ_SEND_WIFI_PACKET
+	M2M_WIFI_REQ_LSN_INT            EnumM2mStaCmd = C.M2M_WIFI_REQ_LSN_INT
+	M2M_WIFI_REQ_DOZE               EnumM2mStaCmd = C.M2M_WIFI_REQ_DOZE
+	M2M_WIFI_REQ_CONN               EnumM2mStaCmd = C.M2M_WIFI_REQ_CONN
+	M2M_WIFI_IND_CONN_PARAM         EnumM2mStaCmd = C.M2M_WIFI_IND_CONN_PARAM
+	M2M_WIFI_REQ_DHCP_FAILURE       EnumM2mStaCmd = C.M2M_WIFI_REQ_DHCP_FAILURE
+	M2M_WIFI_MAX_STA_ALL            EnumM2mStaCmd = C.M2M_WIFI_MAX_STA_ALL
+)
+
+// EnumM2mApCmd as declared in include/m2m_types.h:1007
+type EnumM2mApCmd int32
+
+// EnumM2mApCmd enumeration from include/m2m_types.h:1007
+const (
+	M2M_WIFI_REQ_ENABLE_AP  EnumM2mApCmd = C.M2M_WIFI_REQ_ENABLE_AP
+	M2M_WIFI_REQ_DISABLE_AP EnumM2mApCmd = C.M2M_WIFI_REQ_DISABLE_AP
+	M2M_WIFI_REQ_RESTART_AP EnumM2mApCmd = C.M2M_WIFI_REQ_RESTART_AP
+	M2M_WIFI_MAX_AP_ALL     EnumM2mApCmd = C.M2M_WIFI_MAX_AP_ALL
+)
+
+// EnumM2mServerCmd as declared in include/m2m_types.h:1022
+type EnumM2mServerCmd int32
+
+// EnumM2mServerCmd enumeration from include/m2m_types.h:1022
+const (
+	M2M_WIFI_REQ_CLIENT_CTRL  EnumM2mServerCmd = C.M2M_WIFI_REQ_CLIENT_CTRL
+	M2M_WIFI_RESP_CLIENT_INFO EnumM2mServerCmd = C.M2M_WIFI_RESP_CLIENT_INFO
+	M2M_WIFI_REQ_SERVER_INIT  EnumM2mServerCmd = C.M2M_WIFI_REQ_SERVER_INIT
+	M2M_WIFI_MAX_SERVER_ALL   EnumM2mServerCmd = C.M2M_WIFI_MAX_SERVER_ALL
+)
+
+// EnumM2mGenCmd as declared in include/m2m_types.h:1045
+type EnumM2mGenCmd int32
+
+// EnumM2mGenCmd enumeration from include/m2m_types.h:1045
+const (
+	M2M_WIFI_REQ_ROAMING              EnumM2mGenCmd = C.M2M_WIFI_REQ_ROAMING
+	M2M_WIFI_REQ_XO_SLEEP_ENABLE      EnumM2mGenCmd = C.M2M_WIFI_REQ_XO_SLEEP_ENABLE
+	M2M_WIFI_REQ_SET_STOP_SCAN_OPTION EnumM2mGenCmd = C.M2M_WIFI_REQ_SET_STOP_SCAN_OPTION
+	M2M_WIFI_MAX_GEN_ALL              EnumM2mGenCmd = C.M2M_WIFI_MAX_GEN_ALL
+)
+
+// EnumM2mCryptoCmd as declared in include/m2m_types.h:1066
+type EnumM2mCryptoCmd int32
+
+// EnumM2mCryptoCmd enumeration from include/m2m_types.h:1066
+const (
+	M2M_CRYPTO_REQ_SHA256_INIT      EnumM2mCryptoCmd = C.M2M_CRYPTO_REQ_SHA256_INIT
+	M2M_CRYPTO_RESP_SHA256_INIT     EnumM2mCryptoCmd = C.M2M_CRYPTO_RESP_SHA256_INIT
+	M2M_CRYPTO_REQ_SHA256_UPDATE    EnumM2mCryptoCmd = C.M2M_CRYPTO_REQ_SHA256_UPDATE
+	M2M_CRYPTO_RESP_SHA256_UPDATE   EnumM2mCryptoCmd = C.M2M_CRYPTO_RESP_SHA256_UPDATE
+	M2M_CRYPTO_REQ_SHA256_FINISH    EnumM2mCryptoCmd = C.M2M_CRYPTO_REQ_SHA256_FINISH
+	M2M_CRYPTO_RESP_SHA256_FINISH   EnumM2mCryptoCmd = C.M2M_CRYPTO_RESP_SHA256_FINISH
+	M2M_CRYPTO_REQ_RSA_SIGN_GEN     EnumM2mCryptoCmd = C.M2M_CRYPTO_REQ_RSA_SIGN_GEN
+	M2M_CRYPTO_RESP_RSA_SIGN_GEN    EnumM2mCryptoCmd = C.M2M_CRYPTO_RESP_RSA_SIGN_GEN
+	M2M_CRYPTO_REQ_RSA_SIGN_VERIFY  EnumM2mCryptoCmd = C.M2M_CRYPTO_REQ_RSA_SIGN_VERIFY
+	M2M_CRYPTO_RESP_RSA_SIGN_VERIFY EnumM2mCryptoCmd = C.M2M_CRYPTO_RESP_RSA_SIGN_VERIFY
+	M2M_CRYPTO_MAX_ALL              EnumM2mCryptoCmd = C.M2M_CRYPTO_MAX_ALL
+)
+
+// EnumM2mIpCmd as declared in include/m2m_types.h:1080
+type EnumM2mIpCmd int32
+
+// EnumM2mIpCmd enumeration from include/m2m_types.h:1080
+const (
+	M2M_IP_REQ_STATIC_IP_CONF EnumM2mIpCmd = C.M2M_IP_REQ_STATIC_IP_CONF
+	M2M_IP_REQ_ENABLE_DHCP    EnumM2mIpCmd = C.M2M_IP_REQ_ENABLE_DHCP
+	M2M_IP_REQ_DISABLE_DHCP   EnumM2mIpCmd = C.M2M_IP_REQ_DISABLE_DHCP
+)
+
+// EnumM2mSigmaCmd as declared in include/m2m_types.h:1102
+type EnumM2mSigmaCmd int32
+
+// EnumM2mSigmaCmd enumeration from include/m2m_types.h:1102
+const (
+	M2M_SIGMA_ENABLE          EnumM2mSigmaCmd = C.M2M_SIGMA_ENABLE
+	M2M_SIGMA_TA_START        EnumM2mSigmaCmd = C.M2M_SIGMA_TA_START
+	M2M_SIGMA_TA_STATS        EnumM2mSigmaCmd = C.M2M_SIGMA_TA_STATS
+	M2M_SIGMA_TA_RECEIVE_STOP EnumM2mSigmaCmd = C.M2M_SIGMA_TA_RECEIVE_STOP
+	M2M_SIGMA_ICMP_ARP        EnumM2mSigmaCmd = C.M2M_SIGMA_ICMP_ARP
+	M2M_SIGMA_ICMP_RX         EnumM2mSigmaCmd = C.M2M_SIGMA_ICMP_RX
+	M2M_SIGMA_ICMP_TX         EnumM2mSigmaCmd = C.M2M_SIGMA_ICMP_TX
+	M2M_SIGMA_UDP_TX          EnumM2mSigmaCmd = C.M2M_SIGMA_UDP_TX
+	M2M_SIGMA_UDP_TX_DEFER    EnumM2mSigmaCmd = C.M2M_SIGMA_UDP_TX_DEFER
+	M2M_SIGMA_SECURITY_POLICY EnumM2mSigmaCmd = C.M2M_SIGMA_SECURITY_POLICY
+	M2M_SIGMA_SET_SYSTIME     EnumM2mSigmaCmd = C.M2M_SIGMA_SET_SYSTIME
+)
+
+// EnumM2mConnState as declared in include/m2m_types.h:1124
+type EnumM2mConnState int32
+
+// EnumM2mConnState enumeration from include/m2m_types.h:1124
+const (
+	M2M_WIFI_DISCONNECTED EnumM2mConnState = C.M2M_WIFI_DISCONNECTED
+	M2M_WIFI_CONNECTED    EnumM2mConnState = C.M2M_WIFI_CONNECTED
+	M2M_WIFI_ROAMED       EnumM2mConnState = C.M2M_WIFI_ROAMED
+	M2M_WIFI_UNDEF        EnumM2mConnState = C.M2M_WIFI_UNDEF
+)
+
+// EnumM2mSecType as declared in include/m2m_types.h:1152
+type EnumM2mSecType int32
+
+// EnumM2mSecType enumeration from include/m2m_types.h:1152
+const (
+	M2M_WIFI_SEC_INVALID    EnumM2mSecType = C.M2M_WIFI_SEC_INVALID
+	M2M_WIFI_SEC_OPEN       EnumM2mSecType = C.M2M_WIFI_SEC_OPEN
+	M2M_WIFI_SEC_WPA_PSK    EnumM2mSecType = C.M2M_WIFI_SEC_WPA_PSK
+	M2M_WIFI_SEC_WEP        EnumM2mSecType = C.M2M_WIFI_SEC_WEP
+	M2M_WIFI_SEC_802_1X     EnumM2mSecType = C.M2M_WIFI_SEC_802_1X
+	M2M_WIFI_NUM_AUTH_TYPES EnumM2mSecType = C.M2M_WIFI_NUM_AUTH_TYPES
+)
+
+// EnumM2mSsidMode as declared in include/m2m_types.h:1169
+type EnumM2mSsidMode int32
+
+// EnumM2mSsidMode enumeration from include/m2m_types.h:1169
+const ()
+
+// EnumM2mScanCh as declared in include/m2m_types.h:1197
+type EnumM2mScanCh int32
+
+// EnumM2mScanCh enumeration from include/m2m_types.h:1197
+const (
+	M2M_WIFI_CH_1   EnumM2mScanCh = C.M2M_WIFI_CH_1
+	M2M_WIFI_CH_2   EnumM2mScanCh = C.M2M_WIFI_CH_2
+	M2M_WIFI_CH_3   EnumM2mScanCh = C.M2M_WIFI_CH_3
+	M2M_WIFI_CH_4   EnumM2mScanCh = C.M2M_WIFI_CH_4
+	M2M_WIFI_CH_5   EnumM2mScanCh = C.M2M_WIFI_CH_5
+	M2M_WIFI_CH_6   EnumM2mScanCh = C.M2M_WIFI_CH_6
+	M2M_WIFI_CH_7   EnumM2mScanCh = C.M2M_WIFI_CH_7
+	M2M_WIFI_CH_8   EnumM2mScanCh = C.M2M_WIFI_CH_8
+	M2M_WIFI_CH_9   EnumM2mScanCh = C.M2M_WIFI_CH_9
+	M2M_WIFI_CH_10  EnumM2mScanCh = C.M2M_WIFI_CH_10
+	M2M_WIFI_CH_11  EnumM2mScanCh = C.M2M_WIFI_CH_11
+	M2M_WIFI_CH_12  EnumM2mScanCh = C.M2M_WIFI_CH_12
+	M2M_WIFI_CH_13  EnumM2mScanCh = C.M2M_WIFI_CH_13
+	M2M_WIFI_CH_14  EnumM2mScanCh = C.M2M_WIFI_CH_14
+	M2M_WIFI_CH_ALL EnumM2mScanCh = C.M2M_WIFI_CH_ALL
+)
+
+// EnumM2mScanRegion as declared in include/m2m_types.h:1232
+type EnumM2mScanRegion int32
+
+// EnumM2mScanRegion enumeration from include/m2m_types.h:1232
+const ()
+
+// EnumPowerSaveModes as declared in include/m2m_types.h:1264
+type EnumPowerSaveModes int32
+
+// EnumPowerSaveModes enumeration from include/m2m_types.h:1264
+const (
+	M2M_NO_PS             EnumPowerSaveModes = C.M2M_NO_PS
+	M2M_PS_AUTOMATIC      EnumPowerSaveModes = C.M2M_PS_AUTOMATIC
+	M2M_PS_H_AUTOMATIC    EnumPowerSaveModes = C.M2M_PS_H_AUTOMATIC
+	M2M_PS_DEEP_AUTOMATIC EnumPowerSaveModes = C.M2M_PS_DEEP_AUTOMATIC
+	M2M_PS_MANUAL         EnumPowerSaveModes = C.M2M_PS_MANUAL
+)
+
+// EnumM2mWifiMode as declared in include/m2m_types.h:1287
+type EnumM2mWifiMode int32
+
+// EnumM2mWifiMode enumeration from include/m2m_types.h:1287
+const (
+	M2M_WIFI_MODE_NORMAL   EnumM2mWifiMode = C.M2M_WIFI_MODE_NORMAL
+	M2M_WIFI_MODE_ATE_HIGH EnumM2mWifiMode = C.M2M_WIFI_MODE_ATE_HIGH
+	M2M_WIFI_MODE_ATE_LOW  EnumM2mWifiMode = C.M2M_WIFI_MODE_ATE_LOW
+	M2M_WIFI_MODE_ETHERNET EnumM2mWifiMode = C.M2M_WIFI_MODE_ETHERNET
+	M2M_WIFI_MODE_MAX      EnumM2mWifiMode = C.M2M_WIFI_MODE_MAX
+)
+
+// EnumWPSTrigger as declared in include/m2m_types.h:1303
+type EnumWPSTrigger int32
+
+// EnumWPSTrigger enumeration from include/m2m_types.h:1303
+const ()
+
+// EnumSNTPUseDHCP as declared in include/m2m_types.h:1319
+type EnumSNTPUseDHCP int32
+
+// EnumSNTPUseDHCP enumeration from include/m2m_types.h:1319
+const ()
+
+// EnumM2mP2pCmd as declared in include/m2m_types.h:2333
+type EnumM2mP2pCmd int32
+
+// EnumM2mP2pCmd enumeration from include/m2m_types.h:2333
+const (
+	M2M_WIFI_REQ_P2P_INT_CONNECT EnumM2mP2pCmd = C.M2M_WIFI_REQ_P2P_INT_CONNECT
+	M2M_WIFI_REQ_ENABLE_P2P      EnumM2mP2pCmd = C.M2M_WIFI_REQ_ENABLE_P2P
+	M2M_WIFI_REQ_DISABLE_P2P     EnumM2mP2pCmd = C.M2M_WIFI_REQ_DISABLE_P2P
+	M2M_WIFI_REQ_P2P_REPOST      EnumM2mP2pCmd = C.M2M_WIFI_REQ_P2P_REPOST
+	M2M_WIFI_MAX_P2P_ALL         EnumM2mP2pCmd = C.M2M_WIFI_MAX_P2P_ALL
+)
+
+// EnumWlanTxRate as declared in include/m2m_types.h:2466
+type EnumWlanTxRate int32
+
+// EnumWlanTxRate enumeration from include/m2m_types.h:2466
+const ()
+
+// EnumM2mSslCmd as declared in include/m2m_types.h:2578
+type EnumM2mSslCmd int32
+
+// EnumM2mSslCmd enumeration from include/m2m_types.h:2578
+const (
+	M2M_SSL_REQ_CERT_VERIF       EnumM2mSslCmd = C.M2M_SSL_REQ_CERT_VERIF
+	M2M_SSL_REQ_ECC              EnumM2mSslCmd = C.M2M_SSL_REQ_ECC
+	M2M_SSL_RESP_ECC             EnumM2mSslCmd = C.M2M_SSL_RESP_ECC
+	M2M_SSL_IND_CRL              EnumM2mSslCmd = C.M2M_SSL_IND_CRL
+	M2M_SSL_REQ_WRITE_OWN_CERTS  EnumM2mSslCmd = C.M2M_SSL_REQ_WRITE_OWN_CERTS
+	M2M_SSL_REQ_SET_CS_LIST      EnumM2mSslCmd = C.M2M_SSL_REQ_SET_CS_LIST
+	M2M_SSL_RESP_SET_CS_LIST     EnumM2mSslCmd = C.M2M_SSL_RESP_SET_CS_LIST
+	M2M_SSL_RESP_WRITE_OWN_CERTS EnumM2mSslCmd = C.M2M_SSL_RESP_WRITE_OWN_CERTS
+)
+
+// EnumSslCertExpSettings as declared in include/m2m_types.h:2647
+type EnumSslCertExpSettings int32
+
+// EnumSslCertExpSettings enumeration from include/m2m_types.h:2647
+const (
+	SSL_CERT_EXP_CHECK_DISABLE        EnumSslCertExpSettings = C.SSL_CERT_EXP_CHECK_DISABLE
+	SSL_CERT_EXP_CHECK_ENABLE         EnumSslCertExpSettings = C.SSL_CERT_EXP_CHECK_ENABLE
+	SSL_CERT_EXP_CHECK_EN_IF_SYS_TIME EnumSslCertExpSettings = C.SSL_CERT_EXP_CHECK_EN_IF_SYS_TIME
+)
+
+// EnumTlsFlashStatus as declared in include/m2m_types.h:2696
+type EnumTlsFlashStatus int32
+
+// EnumTlsFlashStatus enumeration from include/m2m_types.h:2696
+const ()
+
+// EnumOtaError as declared in include/m2m_types.h:2743
+type EnumOtaError int32
+
+// EnumOtaError enumeration from include/m2m_types.h:2743
+const (
+	M2M_ERR_OTA_SWITCH_FAIL        EnumOtaError = C.M2M_ERR_OTA_SWITCH_FAIL
+	M2M_ERR_OTA_START_UPDATE_FAIL  EnumOtaError = C.M2M_ERR_OTA_START_UPDATE_FAIL
+	M2M_ERR_OTA_ROLLBACK_FAIL      EnumOtaError = C.M2M_ERR_OTA_ROLLBACK_FAIL
+	M2M_ERR_OTA_INVALID_FLASH_SIZE EnumOtaError = C.M2M_ERR_OTA_INVALID_FLASH_SIZE
+	M2M_ERR_OTA_INVALID_ARG        EnumOtaError = C.M2M_ERR_OTA_INVALID_ARG
+	M2M_ERR_OTA_INPROGRESS         EnumOtaError = C.M2M_ERR_OTA_INPROGRESS
+)
+
+// EnumM2mOtaCmd as declared in include/m2m_types.h:2781
+type EnumM2mOtaCmd int32
+
+// EnumM2mOtaCmd enumeration from include/m2m_types.h:2781
+const (
+	M2M_OTA_REQ_NOTIF_SET_URL          EnumM2mOtaCmd = C.M2M_OTA_REQ_NOTIF_SET_URL
+	M2M_OTA_REQ_NOTIF_CHECK_FOR_UPDATE EnumM2mOtaCmd = C.M2M_OTA_REQ_NOTIF_CHECK_FOR_UPDATE
+	M2M_OTA_REQ_NOTIF_SCHED            EnumM2mOtaCmd = C.M2M_OTA_REQ_NOTIF_SCHED
+	M2M_OTA_REQ_START_FW_UPDATE        EnumM2mOtaCmd = C.M2M_OTA_REQ_START_FW_UPDATE
+	M2M_OTA_REQ_SWITCH_FIRMWARE        EnumM2mOtaCmd = C.M2M_OTA_REQ_SWITCH_FIRMWARE
+	M2M_OTA_REQ_ROLLBACK_FW            EnumM2mOtaCmd = C.M2M_OTA_REQ_ROLLBACK_FW
+	M2M_OTA_RESP_NOTIF_UPDATE_INFO     EnumM2mOtaCmd = C.M2M_OTA_RESP_NOTIF_UPDATE_INFO
+	M2M_OTA_RESP_UPDATE_STATUS         EnumM2mOtaCmd = C.M2M_OTA_RESP_UPDATE_STATUS
+	M2M_OTA_REQ_TEST                   EnumM2mOtaCmd = C.M2M_OTA_REQ_TEST
+	M2M_OTA_REQ_START_CRT_UPDATE       EnumM2mOtaCmd = C.M2M_OTA_REQ_START_CRT_UPDATE
+	M2M_OTA_REQ_SWITCH_CRT_IMG         EnumM2mOtaCmd = C.M2M_OTA_REQ_SWITCH_CRT_IMG
+	M2M_OTA_REQ_ROLLBACK_CRT           EnumM2mOtaCmd = C.M2M_OTA_REQ_ROLLBACK_CRT
+	M2M_OTA_REQ_ABORT                  EnumM2mOtaCmd = C.M2M_OTA_REQ_ABORT
+	M2M_OTA_REQ_HOST_FILE_STATUS       EnumM2mOtaCmd = C.M2M_OTA_REQ_HOST_FILE_STATUS
+	M2M_OTA_RESP_HOST_FILE_STATUS      EnumM2mOtaCmd = C.M2M_OTA_RESP_HOST_FILE_STATUS
+	M2M_OTA_REQ_HOST_FILE_DOWNLOAD     EnumM2mOtaCmd = C.M2M_OTA_REQ_HOST_FILE_DOWNLOAD
+	M2M_OTA_RESP_HOST_FILE_DOWNLOAD    EnumM2mOtaCmd = C.M2M_OTA_RESP_HOST_FILE_DOWNLOAD
+	M2M_OTA_REQ_HOST_FILE_READ         EnumM2mOtaCmd = C.M2M_OTA_REQ_HOST_FILE_READ
+	M2M_OTA_RESP_HOST_FILE_READ        EnumM2mOtaCmd = C.M2M_OTA_RESP_HOST_FILE_READ
+	M2M_OTA_REQ_HOST_FILE_ERASE        EnumM2mOtaCmd = C.M2M_OTA_REQ_HOST_FILE_ERASE
+	M2M_OTA_RESP_HOST_FILE_ERASE       EnumM2mOtaCmd = C.M2M_OTA_RESP_HOST_FILE_ERASE
+	M2M_OTA_REQ_START_FW_UPDATE_V2     EnumM2mOtaCmd = C.M2M_OTA_REQ_START_FW_UPDATE_V2
+	M2M_OTA_MAX_ALL                    EnumM2mOtaCmd = C.M2M_OTA_MAX_ALL
+)
+
+// EnumOtaUpdateStatus as declared in include/m2m_types.h:2813
+type EnumOtaUpdateStatus int32
+
+// EnumOtaUpdateStatus enumeration from include/m2m_types.h:2813
+const ()
+
+// EnumOtaUpdateStatusType as declared in include/m2m_types.h:2833
+type EnumOtaUpdateStatusType int32
+
+// EnumOtaUpdateStatusType enumeration from include/m2m_types.h:2833
+const ()
+
+// EnumSockErrSource as declared in include/socket.h:646
+type EnumSockErrSource int32
+
+// EnumSockErrSource enumeration from include/socket.h:646
+const ()
+
+// EnumSocketCallbackMsgType as declared in include/socket.h:756
+type EnumSocketCallbackMsgType int32
+
+// EnumSocketCallbackMsgType enumeration from include/socket.h:756
+const ()

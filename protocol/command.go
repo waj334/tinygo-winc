@@ -24,18 +24,20 @@ SOFTWARE.
 
 package protocol
 
+import "github.com/waj334/tinygo-winc/debug"
+
 const (
-	dma_write               byte = 0xC1
-	dma_read                byte = 0xC2
-	register_internal_write byte = 0xC3
-	register_internal_read  byte = 0xC4
-	transaction_termination byte = 0xC5
-	repeat_data_packet      byte = 0xC6
-	dma_extended_write      byte = 0xC7
-	dma_extended_read       byte = 0xC8
-	dma_single_word_write   byte = 0xC9
-	dma_single_word_read    byte = 0xCA
-	soft_reset              byte = 0xCF
+	dmaWrite               byte = 0xC1
+	dmaRead                byte = 0xC2
+	registerInternalWrite  byte = 0xC3
+	registerInternalRead   byte = 0xC4
+	transactionTermination byte = 0xC5
+	repeatDataPacket       byte = 0xC6
+	dmaExtendedWrite       byte = 0xC7
+	dmaExtendedRead        byte = 0xC8
+	dmaSingleWordWrite     byte = 0xC9
+	dmaSingleWordRead      byte = 0xCA
+	softReset              byte = 0xCF
 
 	szCommandA = 4
 	szCommandB = 6
@@ -58,7 +60,7 @@ func (cmd *commandPacket) dmaSingleWordRead(address uint32) {
 	cmd.length = szCommandA
 
 	// Set the payload bytes
-	cmd.data[0] = dma_single_word_read
+	cmd.data[0] = dmaSingleWordRead
 	cmd.data[1] = byte(address >> 16)
 	cmd.data[2] = byte(address >> 8)
 	cmd.data[3] = byte(address)
@@ -69,7 +71,7 @@ func (cmd *commandPacket) registerInternalRead(address uint32, clockless bool) {
 	cmd.length = szCommandA
 
 	// Set the payload bytes
-	cmd.data[0] = register_internal_read
+	cmd.data[0] = registerInternalRead
 	cmd.data[1] = byte(address >> 8)
 	cmd.data[2] = byte(address)
 	cmd.data[3] = 0
@@ -84,7 +86,7 @@ func (cmd *commandPacket) softReset() {
 	cmd.length = szCommandA
 
 	// Set the payload bytes
-	cmd.data[0] = soft_reset
+	cmd.data[0] = softReset
 	cmd.data[1] = byte(0xFF)
 	cmd.data[2] = byte(0xFF)
 	cmd.data[3] = byte(0xFF)
@@ -93,7 +95,7 @@ func (cmd *commandPacket) softReset() {
 func (cmd *commandPacket) dmaExtendedRead(address uint32, length int) {
 	cmd.length = szCommandC
 
-	cmd.data[0] = dma_extended_read
+	cmd.data[0] = dmaExtendedRead
 	cmd.data[1] = byte(address >> 16)
 	cmd.data[2] = byte(address >> 8)
 	cmd.data[3] = byte(address)
@@ -105,7 +107,7 @@ func (cmd *commandPacket) dmaExtendedRead(address uint32, length int) {
 func (cmd *commandPacket) dmaExtendedWrite(address uint32, length int) {
 	cmd.length = szCommandC
 
-	cmd.data[0] = dma_extended_write
+	cmd.data[0] = dmaExtendedWrite
 	cmd.data[1] = byte(address >> 16)
 	cmd.data[2] = byte(address >> 8)
 	cmd.data[3] = byte(address)
@@ -118,7 +120,7 @@ func (cmd *commandPacket) registerInternalWrite(address, value uint32, clockless
 	cmd.length = szCommandC
 
 	// Set the payload bytes
-	cmd.data[0] = register_internal_write
+	cmd.data[0] = registerInternalWrite
 	cmd.data[1] = byte(address >> 8)
 	cmd.data[2] = byte(address)
 	cmd.data[3] = byte(value >> 24)
@@ -136,7 +138,7 @@ func (cmd *commandPacket) dmaSingleWordWrite(address, value uint32) {
 	cmd.length = szCommandD
 
 	// Set the payload bytes
-	cmd.data[0] = dma_single_word_write
+	cmd.data[0] = dmaSingleWordWrite
 	cmd.data[1] = byte(address >> 16)
 	cmd.data[2] = byte(address >> 8)
 	cmd.data[3] = byte(address)
@@ -151,8 +153,11 @@ func (cmd *commandPacket) calculateCRC8() byte {
 }
 
 func (cmd *commandPacket) write(t *transport) (err error) {
-	t.cs.Low()
-	defer t.cs.High()
+	t.chipSelect(false)
+	defer t.chipSelect(true)
+
+	debug.DEBUG("PROTOCOL: Sending command %X: LEN=%v %v", cmd.data[0], cmd.length, cmd.data)
+	defer debug.DEBUG("PROTOCOL: Done sending command %X", cmd.data[0])
 
 	// Write the data payload
 	if _, err = t.Write(cmd.data[:cmd.length]); err != nil {
@@ -170,10 +175,13 @@ func (cmd *commandPacket) write(t *transport) (err error) {
 }
 
 func (cmd *commandPacket) response(t *transport, clockless bool) (err error) {
-	t.cs.Low()
-	defer t.cs.High()
+	t.chipSelect(false)
+	defer t.chipSelect(true)
 
-	if cmd.data[0] == soft_reset || cmd.data[0] == transaction_termination || cmd.data[0] == repeat_data_packet {
+	debug.DEBUG("PROTOCOL: Receiving command %X response", cmd.data[0])
+	defer debug.DEBUG("PROTOCOL: Done receiving command %X response", cmd.data[0])
+
+	if cmd.data[0] == softReset || cmd.data[0] == transactionTermination || cmd.data[0] == repeatDataPacket {
 		// Attempt to read and return any error
 		// NOTE: Nothing was done with the data read below. This read the additional leading byte I observed when
 		//       testing the reset cycle. Fixed the issue when resetting.
@@ -184,6 +192,7 @@ func (cmd *commandPacket) response(t *transport, clockless bool) (err error) {
 
 	var response byte
 	response, err = t.Transfer(0)
+	debug.DEBUG("PROTOCOL: response: %X", response)
 
 	if err != nil {
 		return err
@@ -193,6 +202,7 @@ func (cmd *commandPacket) response(t *transport, clockless bool) (err error) {
 
 	var code byte
 	code, err = t.Transfer(0)
+	debug.DEBUG("PROTOCOL: code: %X", code)
 
 	if err != nil {
 		return err

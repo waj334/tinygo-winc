@@ -8,10 +8,75 @@ package types
 #include "../include/socket.h"
 #include "../include/m2m_socket_host_if.h"
 #include "../include/m2m_hif.h"
+#include "../include/ecc_types.h"
+#include "../include/wdrv_winc_ssl.h"
 #include <stdlib.h>
 #include "cgo_helpers.h"
 */
 import "C"
+import "unsafe"
+
+// ECPoint as declared in include/ecc_types.h:126
+type ECPoint struct {
+	XY             [64]byte
+	U16Size        uint16
+	U16PrivKeyID   uint16
+	ref5481a313    *C.tstrECPoint
+	allocs5481a313 interface{}
+}
+
+// ECDomainParam as declared in include/ecc_types.h:142
+type ECDomainParam struct {
+	P              [8]uint32
+	A              [8]uint32
+	B              [8]uint32
+	G              ECPoint
+	ref305aa0bf    *C.tstrECDomainParam
+	allocs305aa0bf interface{}
+}
+
+// EllipticCurve as declared in include/ecc_types.h:155
+type EllipticCurve struct {
+	EnuType        EnumEcNamedCurve
+	StrParam       ECDomainParam
+	ref4d97526a    *C.tstrEllipticCurve
+	allocs4d97526a interface{}
+}
+
+// EcdhReqInfo as declared in include/ecc_types.h:207
+type EcdhReqInfo struct {
+	U16REQ         uint16
+	U16Status      uint16
+	U32UserData    uint32
+	U32SeqNo       uint32
+	StrPubKey      ECPoint
+	Au8Key         [32]byte
+	ref82b1acca    *C.tstrEcdhReqInfo
+	allocs82b1acca interface{}
+}
+
+// EcdsaVerifyReqInfo as declared in include/ecc_types.h:221
+type EcdsaVerifyReqInfo struct {
+	U16REQ         uint16
+	U16Status      uint16
+	U32UserData    uint32
+	U32SeqNo       uint32
+	U32nSig        uint32
+	ref38d99f76    *C.tstrEcdsaVerifyReqInfo
+	allocs38d99f76 interface{}
+}
+
+// EcdsaSignReqInfo as declared in include/ecc_types.h:236
+type EcdsaSignReqInfo struct {
+	U16REQ         uint16
+	U16Status      uint16
+	U32UserData    uint32
+	U32SeqNo       uint32
+	U16CurveType   uint16
+	U16HashSz      uint16
+	ref520501e6    *C.tstrEcdsaSignReqInfo
+	allocs520501e6 interface{}
+}
 
 // HifHdr as declared in include/m2m_hif.h:63
 type HifHdr struct {
@@ -709,6 +774,7 @@ type M2MP2PConnect struct {
 // M2MSNTPConfig as declared in include/m2m_types.h:2375
 type M2MSNTPConfig struct {
 	AcNTPServer    [33]byte
+	EnuUseDHCP     EnumSNTPUseDHCP
 	__PAD8__       [2]byte
 	ref649da0d7    *C.tstrM2MSNTPConfig
 	allocs649da0d7 interface{}
@@ -749,6 +815,8 @@ type Prng struct {
 type ConfAutoRate struct {
 	U16ArMaxRecoveryFailThreshold uint16
 	U16ArMinRecoveryFailThreshold uint16
+	EnuWlanTxRate                 EnumWlanTxRate
+	EnuArInitialRateSel           EnumWlanTxRate
 	U8ArEnoughTxThreshold         byte
 	U8ArSuccessTXThreshold        byte
 	U8ArFailTxThreshold           byte
@@ -907,6 +975,7 @@ type OtaStart struct {
 
 // SockErr as declared in include/socket.h:686
 type SockErr struct {
+	EnuErrSource   EnumSockErrSource
 	U8ErrCode      byte
 	ref7741dd47    *C.tstrSockErr
 	allocs7741dd47 interface{}
@@ -948,4 +1017,56 @@ type SocketRecvMsg struct {
 	U16RemainingSize uint16
 	ref4cb67fc3      *C.tstrSocketRecvMsg
 	allocs4cb67fc3   interface{}
+}
+
+// EC_POINT_REP as declared in include/wdrv_winc_ssl.h:199
+type EC_POINT_REP struct {
+	X              [32]byte
+	Y              [32]byte
+	Size           uint16
+	PrivKeyID      uint16
+	ref45b763ad    *C.WDRV_WINC_EC_POINT_REP
+	allocs45b763ad interface{}
+}
+
+// ECDSA_VERIFY_REQ_INFO as declared in include/wdrv_winc_ssl.h:218
+type ECDSA_VERIFY_REQ_INFO struct {
+	NSig           uint32
+	ref9275a4f4    *C.WDRV_WINC_ECDSA_VERIFY_REQ_INFO
+	allocs9275a4f4 interface{}
+}
+
+// ECDSA_SIGN_REQ_INFO as declared in include/wdrv_winc_ssl.h:238
+type ECDSA_SIGN_REQ_INFO struct {
+	CurveType      uint16
+	HashSz         uint16
+	ref474741b0    *C.WDRV_WINC_ECDSA_SIGN_REQ_INFO
+	allocs474741b0 interface{}
+}
+
+// ECDH_INFO as declared in include/wdrv_winc_ssl.h:258
+type ECDH_INFO struct {
+	PubKey       EC_POINT_REP
+	Key          [32]byte
+	refd1e512    *C.WDRV_WINC_ECDH_INFO
+	allocsd1e512 interface{}
+}
+
+// ECC_REQ_EX_INFO as declared in include/wdrv_winc_ssl.h:278
+const sizeofECC_REQ_EX_INFO = unsafe.Sizeof(C.WDRV_WINC_ECC_REQ_EX_INFO{})
+
+type ECC_REQ_EX_INFO [sizeofECC_REQ_EX_INFO]byte
+
+// ECC_HANDSHAKE_INFO as declared in include/wdrv_winc_ssl.h:297
+type ECC_HANDSHAKE_INFO struct {
+	Data           [2]uint32
+	ref435c2a3e    *C.WDRV_WINC_ECC_HANDSHAKE_INFO
+	allocs435c2a3e interface{}
+}
+
+// CIPHER_SUITE_CONTEXT as declared in include/wdrv_winc_ssl.h:317
+type CIPHER_SUITE_CONTEXT struct {
+	CiperSuites    uint32
+	refeaa2203b    *C.WDRV_WINC_CIPHER_SUITE_CONTEXT
+	allocseaa2203b interface{}
 }

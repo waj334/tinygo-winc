@@ -5,6 +5,8 @@
 #include "../include/socket.h"
 #include "../include/m2m_socket_host_if.h"
 #include "../include/m2m_hif.h"
+#include "../include/ecc_types.h"
+#include "../include/wdrv_winc_ssl.h"
 #include <stdlib.h>
 #pragma once
 

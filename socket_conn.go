@@ -12,15 +12,29 @@ func (s *Socket) Read(b []byte) (n int, err error) {
 		return 0, net.ErrClosed
 	}
 
-	n, err = s.Recv(b, s.recvDeadline)
+	remaining := len(b)
+	for remaining > 0 {
+		var count int
+		count, err = s.Recv(b[n:], s.recvDeadline)
 
-	if err == ErrSocketTimeout {
-		err = os.ErrDeadlineExceeded
-	} else if err == ErrSocketConnAborted {
-		err = net.ErrClosed
+		remaining -= count
+		n += count
+
+		if err == ErrSocketTimeout {
+			return n, os.ErrDeadlineExceeded
+		} else if err == ErrSocketConnAborted {
+			return n, net.ErrClosed
+		} else if err != nil {
+			return n, err
+		}
+
+		// Check read deadline
+		if !s.recvDeadline.IsZero() && time.Now().After(s.recvDeadline) {
+			return n, os.ErrDeadlineExceeded
+		}
 	}
 
-	return
+	return n, nil
 }
 
 func (s *Socket) Write(b []byte) (n int, err error) {
@@ -29,13 +43,28 @@ func (s *Socket) Write(b []byte) (n int, err error) {
 		return 0, net.ErrClosed
 	}
 
-	if n, err = s.Send(b, time.Now()); err == ErrSocketConnAborted {
-		err = net.ErrClosed
-	} else if err == ErrSocketTimeout {
-		err = os.ErrDeadlineExceeded
+	remaining := len(b)
+
+	for remaining > 0 {
+		var count int
+		count, err = s.Send(b[n:], s.sendDeadline)
+
+		remaining -= count
+		n += count
+
+		if err == ErrSocketConnAborted {
+			err = net.ErrClosed
+		} else if err == ErrSocketTimeout {
+			err = os.ErrDeadlineExceeded
+		}
+
+		// Check write deadline
+		if !s.sendDeadline.IsZero() && time.Now().After(s.sendDeadline) {
+			return n, os.ErrDeadlineExceeded
+		}
 	}
 
-	return
+	return n, nil
 }
 
 func (s *Socket) Close() error {

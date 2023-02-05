@@ -25,15 +25,18 @@ SOFTWARE.
 package protocol
 
 import (
+	"github.com/waj334/tinygo-winc/debug"
 	"sync"
 	"time"
 
-	"github.com/waj334/tinygo-winc/protocol/hal"
+	"machine"
+
+	"tinygo.org/x/drivers"
 )
 
 type transport struct {
-	spi      hal.SPI
-	cs       hal.Pin
+	spi      drivers.SPI
+	cs       machine.Pin
 	busMutex sync.Mutex
 	spiMutex sync.Mutex
 
@@ -44,11 +47,11 @@ func (t *transport) init() (err error) {
 	t.crcEnabled = true
 
 	var result uint32
-	result, err = t.readRegister(_NMI_SPI_PROTOCOL_CONFIG)
+	result, err = t.ReadRegister(_NMI_SPI_PROTOCOL_CONFIG)
 	if err != nil {
 		// Try again with CRC disabled
 		t.crcEnabled = false
-		result, err = t.readRegister(_NMI_SPI_PROTOCOL_CONFIG)
+		result, err = t.ReadRegister(_NMI_SPI_PROTOCOL_CONFIG)
 		if err != nil {
 			return errProtocolFailed
 		}
@@ -61,7 +64,7 @@ func (t *transport) init() (err error) {
 		result &= 0x8F
 		result |= 0x5 << 4
 
-		err = t.writeRegister(_NMI_SPI_PROTOCOL_CONFIG, result)
+		err = t.WriteRegister(_NMI_SPI_PROTOCOL_CONFIG, result)
 		if err != nil {
 			return err
 		}
@@ -105,7 +108,7 @@ func (t *transport) Read(b []byte) (n int, err error) {
 
 func (t *transport) initPacketSize() error {
 	// Set the packet size
-	result, err := t.readRegister(_SPI_BASE + 0x24)
+	result, err := t.ReadRegister(_SPI_BASE + 0x24)
 	if err != nil {
 		return err
 	}
@@ -129,7 +132,7 @@ func (t *transport) initPacketSize() error {
 	}
 
 	// Write the packet size setting
-	err = t.writeRegister(_SPI_BASE+0x24, result)
+	err = t.WriteRegister(_SPI_BASE+0x24, result)
 	if err != nil {
 		return err
 	}
@@ -137,7 +140,7 @@ func (t *transport) initPacketSize() error {
 	return nil
 }
 
-func (t *transport) readRegister(address uint32) (result uint32, err error) {
+func (t *transport) ReadRegister(address uint32) (result uint32, err error) {
 	t.busMutex.Lock()
 	defer t.busMutex.Unlock()
 
@@ -196,7 +199,7 @@ func (t *transport) readRegister(address uint32) (result uint32, err error) {
 	return
 }
 
-func (t *transport) writeRegister(address, value uint32) (err error) {
+func (t *transport) WriteRegister(address, value uint32) (err error) {
 	t.busMutex.Lock()
 	defer t.busMutex.Unlock()
 
@@ -242,7 +245,7 @@ func (t *transport) writeRegister(address, value uint32) (err error) {
 	return
 }
 
-func (t *transport) readBlock(address uint32, data []byte) (err error) {
+func (t *transport) ReadBlock(address uint32, data []byte) (err error) {
 	t.busMutex.Lock()
 	defer t.busMutex.Unlock()
 
@@ -298,59 +301,28 @@ func (t *transport) readBlock(address uint32, data []byte) (err error) {
 	return
 }
 
-func (t *transport) writeBlock(address uint32, data []byte) (err error) {
+func (t *transport) WriteBlock(address uint32, data []byte) (err error) {
+	debug.DEBUG("Transport: WriteBlock - BEGIN")
+	defer debug.DEBUG("Transport: WriteBlock - END")
+
 	t.busMutex.Lock()
 	defer t.busMutex.Unlock()
 
-	for retry := 0; retry < 10; retry++ {
-		// Determine how many blocks will be sent
-		count := (len(data) / _SPI_BUS_MTU) + 1
-
-		offset := 0
-		for i := 0; i < count; i++ {
-			window := data[offset:min(len(data), offset+_SPI_BUS_MTU)]
-			cmd := commandPacket{}
-
-			// Format the DMA extended write command
-			l := len(window)
-			if l == 1 {
-				tmp := make([]byte, 2)
-				tmp[0] = window[0]
-				window = tmp
-				l = 2
-			}
-			cmd.dmaExtendedWrite(address+uint32(offset), l)
-
-			// Send the command
-			if err = cmd.write(t); err != nil {
-				goto reset
-			}
-
-			// Wait for the response
-			if err = cmd.response(t, false); err != nil {
-				goto reset
-			}
-
-			// Write the data
-			pkt := dataPacket(window)
-			if err = pkt.write(t, t.crcEnabled); err != nil {
-				goto reset
-			}
-
-			offset += _SPI_BUS_MTU
-
-			// read the data response
-			if err = pkt.response(t); err != nil {
-				goto reset
-			}
+	for len(data) > 0 {
+		chunk := data
+		if len(chunk) > 2040 {
+			chunk = chunk[:2040]
+			data = data[2040:]
+		} else {
+			data = []byte{}
 		}
 
-		// Stop the loop if there was no failed attempt
-		break
-	reset:
-		time.Sleep(time.Millisecond)
-		t.internalReset()
-		time.Sleep(time.Millisecond)
+		if err = t.writeBlockInternal(address, chunk); err != nil {
+			return
+		}
+
+		// Advance address
+		address += uint32(len(chunk))
 	}
 
 	return
@@ -363,7 +335,58 @@ func (t *transport) reset() (err error) {
 	return t.internalReset()
 }
 
+func (t *transport) writeBlockInternal(address uint32, data []byte) (err error) {
+	// The minimum block size is 2 bytes
+	buf := data
+	if len(data) == 1 {
+		buf = make([]byte, 2)
+		buf[0] = data[0]
+	}
+
+	cmd := commandPacket{}
+	cmd.dmaExtendedWrite(address, len(buf))
+
+	pkt := dataPacket(data)
+
+	for retry := 0; retry < 10; retry++ {
+		debug.DEBUG("Transport: Attempt %v - BEGIN", retry)
+
+		// Send the command
+		if err = cmd.write(t); err != nil {
+			goto reset
+		}
+
+		// Wait for the response
+		if err = cmd.response(t, false); err != nil {
+			goto reset
+		}
+
+		// Write the data
+		if err = pkt.write(t, t.crcEnabled); err != nil {
+			goto reset
+		}
+
+		// read the data response
+		if err = pkt.response(t); err != nil {
+			goto reset
+		}
+
+		// Stop the loop if there was no failed attempt
+		return
+	reset:
+		time.Sleep(time.Millisecond)
+		t.internalReset()
+		time.Sleep(time.Millisecond)
+		debug.DEBUG("Transport: Attempt %v - END", retry)
+	}
+
+	return
+}
+
 func (t *transport) internalReset() (err error) {
+	debug.DEBUG("PROTOCOL: internalReset - BEGIN")
+	defer debug.DEBUG("PROTOCOL: internalReset - END")
+
 	// NOTE: Do not lock mutex in this function
 	cmd := commandPacket{}
 	cmd.softReset()
@@ -380,4 +403,14 @@ func (t *transport) internalReset() (err error) {
 	time.Sleep(time.Millisecond * 100)
 
 	return
+}
+
+func (t *transport) chipSelect(enable bool) {
+	if t.cs != machine.NoPin && t.cs != 0 {
+		if enable {
+			t.cs.High()
+		} else {
+			t.cs.Low()
+		}
+	}
 }

@@ -25,22 +25,25 @@ SOFTWARE.
 package winc
 
 import (
+	"github.com/waj334/tinygo-winc/debug"
 	"net"
 	"sync"
 	"time"
 
+	"machine"
+
 	"github.com/waj334/tinygo-winc/protocol"
-	"github.com/waj334/tinygo-winc/protocol/hal"
+	"tinygo.org/x/drivers"
 )
 
 type WINC struct {
-	SPI       hal.SPI
-	CS        hal.Pin
-	EnablePin hal.Pin
-	ResetPin  hal.Pin
+	SPI       drivers.SPI
+	CS        machine.Pin
+	IRQ       machine.Pin
+	EnablePin machine.Pin
+	ResetPin  machine.Pin
 
-	SetIRQFunc   hal.SetInterruptHandlerFunc
-	ResetIRQFunc hal.ResetInterruptHandlerFunc
+	EccProvider EccProvider
 
 	wifiState WifiState
 	ipAddr    net.IPNet
@@ -80,16 +83,15 @@ func (w *WINC) Initialize() (err error) {
 		// Register interrupt callbacks
 		w.hif.RegisterCallback(GroupWIFI, w.wifiCallback)
 		w.hif.RegisterCallback(GroupIP, w.socketCallback)
+		w.hif.RegisterCallback(GroupSSL, w.sslCallback)
 
 		// Start the interrupt service (go)routine
 		w.isrSignal = make(chan bool, 1)
 		w.isrShutdownSignal = make(chan bool, 1)
 		go w.isr(w.isrSignal)
 
-		// set up the interrupt
-		if err = w.SetIRQFunc(); err != nil {
-			return
-		}
+		// Enable the interrupt
+		w.setInterruptEnabled(true)
 
 		// Create the callback channel
 		w.callbackChan = make(chan any, 1)
@@ -117,7 +119,7 @@ func (w *WINC) Reset() {
 	defer w.mutex.Unlock()
 
 	// Unset the interrupt handler
-	w.ResetIRQFunc()
+	w.setInterruptEnabled(false)
 
 	// Stop the ISR routine
 	if w.isrSignal != nil {
@@ -171,6 +173,14 @@ func (w *WINC) GetGPIOState(gpio GPIOType) (GPIOState, error) {
 	return GPIOState(state), err
 }
 
+func (w *WINC) setInterruptEnabled(on bool) {
+	if on {
+		w.IRQ.SetInterrupt(machine.PinFalling, w.irqHandler)
+	} else {
+		w.IRQ.SetInterrupt(machine.PinFalling, nil)
+	}
+}
+
 func (w *WINC) isr(signal <-chan bool) {
 	// Send the shutdown signal when this routine eventually returns
 	defer func() { w.isrShutdownSignal <- true }()
@@ -191,20 +201,20 @@ func (w *WINC) isr(signal <-chan bool) {
 				// Handle the interrupt
 				err = w.hif.Isr()
 				if err != nil {
-					println(err.Error())
+					debug.DEBUG("ISR error: %v", err)
 				}
 				// Sleep the chip
 				if err = w.hif.ChipSleep(); err != nil {
-					println(err.Error())
+					debug.DEBUG("ISR error: %v", err)
 				}
 			} else {
-				println(err.Error())
+				debug.DEBUG("ISR error: %v", err)
 			}
 		}
 	}
 }
 
-func (w *WINC) IrqHandler(hal.Pin) {
+func (w *WINC) irqHandler(machine.Pin) {
 	select {
 	case w.isrSignal <- true:
 	// Unblock the interrupt service (go)routine

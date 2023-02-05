@@ -25,12 +25,15 @@ SOFTWARE.
 package protocol
 
 import (
+	"github.com/waj334/tinygo-winc/debug"
+	"machine"
+	"runtime/volatile"
 	"sync"
 	"time"
 
-	"runtime/volatile"
+	"tinygo.org/x/drivers"
 
-	"github.com/waj334/tinygo-winc/protocol/hal"
+	"github.com/waj334/tinygo-winc/protocol/types"
 )
 
 type (
@@ -42,6 +45,7 @@ const (
 	GroupMax           = 9
 	_hifMaxPacketSize  = 1600 - 4
 	M2M_HIF_HDR_OFFSET = uint16(8)
+	HIF_HDR_OFFSET     = 8
 )
 
 const (
@@ -71,7 +75,7 @@ type Hif struct {
 	mutex         sync.Mutex
 }
 
-func CreateHif(spi hal.SPI, cs hal.Pin) Hif {
+func CreateHif(spi drivers.SPI, cs machine.Pin) Hif {
 	return Hif{
 		t: transport{
 			spi: spi,
@@ -106,6 +110,35 @@ func (hif *Hif) Init() (err error) {
 	}
 
 	return nil
+}
+
+func (hif *Hif) InitDownload() (err error) {
+	if err = hif.t.init(); err != nil {
+		return err
+	}
+
+	chipId, err := hif.GetChipId()
+	if err != nil {
+		return
+	}
+
+	if (chipId & 0xffff0000) != 0x300000 {
+		if err = hif.Halt(); err != nil {
+			return
+		}
+	}
+
+	// Init the transport
+	if err = hif.t.init(); err != nil {
+		return
+	}
+
+	// Disable all interrupts
+	if err = hif.t.WriteRegister(0x20300, 0); err != nil {
+		return
+	}
+
+	return
 }
 
 func (hif *Hif) Shutdown() {
@@ -153,10 +186,10 @@ func (hif *Hif) chipWakeInternal() (err error) {
 		return nil
 	}
 
-	if err = hif.t.writeRegister(_HOST_CORT_COMM, _NBIT0); err != nil {
+	if err = hif.t.WriteRegister(_HOST_CORT_COMM, _NBIT0); err != nil {
 		return err
 	}
-	if err = hif.t.writeRegister(_WAKE_CLOCK_REG, _NBIT1); err != nil {
+	if err = hif.t.WriteRegister(_WAKE_CLOCK_REG, _NBIT1); err != nil {
 		return err
 	}
 	time.Sleep(time.Millisecond * 3)
@@ -164,7 +197,7 @@ func (hif *Hif) chipWakeInternal() (err error) {
 	// Receive clock enabled register until bit 2 is 1
 	for retries := 0; retries < 10; retries++ {
 		var reg uint32
-		if reg, err = hif.t.readRegister(_CLOCKS_EN_REG); err != nil {
+		if reg, err = hif.t.ReadRegister(_CLOCKS_EN_REG); err != nil {
 			return err
 		} else if reg&_NBIT2 != 0 {
 			// Reset the bus
@@ -188,7 +221,7 @@ func (hif *Hif) ChipSleep() error {
 
 func (hif *Hif) chipSleepInternal() error {
 	for {
-		result, err := hif.t.readRegister(_CORT_HOST_COMM)
+		result, err := hif.t.ReadRegister(_CORT_HOST_COMM)
 		if err != nil {
 			return err
 		} else if result&_NBIT0 == 0 {
@@ -197,26 +230,26 @@ func (hif *Hif) chipSleepInternal() error {
 	}
 
 	// Clear bit 1
-	result, err := hif.t.readRegister(_WAKE_CLOCK_REG)
+	result, err := hif.t.ReadRegister(_WAKE_CLOCK_REG)
 	if err != nil {
 		return err
 	}
 
 	if result&_NBIT1 != 0 {
 		result &= ^_NBIT1
-		if err = hif.t.writeRegister(_WAKE_CLOCK_REG, result); err != nil {
+		if err = hif.t.WriteRegister(_WAKE_CLOCK_REG, result); err != nil {
 			return err
 		}
 	}
 
-	result, err = hif.t.readRegister(_HOST_CORT_COMM)
+	result, err = hif.t.ReadRegister(_HOST_CORT_COMM)
 	if err != nil {
 		return err
 	}
 
 	if result&_NBIT0 != 0 {
 		result &= ^_NBIT0
-		err = hif.t.writeRegister(_HOST_CORT_COMM, result)
+		err = hif.t.WriteRegister(_HOST_CORT_COMM, result)
 		if err != nil {
 			return err
 		}
@@ -232,13 +265,13 @@ func (hif *Hif) GetChipId() (uint32, error) {
 	if chipId == 0 {
 		var err error
 		// Receive the chip ID
-		chipId, err = hif.t.readRegister(_NMI_CHIPID)
+		chipId, err = hif.t.ReadRegister(_NMI_CHIPID)
 		if err != nil {
 			return 0, err
 		}
 
 		var rfrevid uint32
-		if rfrevid, err = hif.t.readRegister(0x13F4); err != nil {
+		if rfrevid, err = hif.t.ReadRegister(0x13F4); err != nil {
 			return 0, err
 		}
 
@@ -253,7 +286,7 @@ func (hif *Hif) GetChipId() (uint32, error) {
 				chipId = 0x1002B2
 			}
 		} else if chipId == 0x1000F0 {
-			if chipId, err = hif.t.readRegister(0x3B0000); err != nil {
+			if chipId, err = hif.t.ReadRegister(0x3B0000); err != nil {
 				return 0, err
 			}
 		}
@@ -291,7 +324,7 @@ func (hif *Hif) Receive(address uint32, data []byte, done bool) (err error) {
 	}
 
 	// Receive the packet
-	if err = hif.t.readBlock(address, data); err != nil {
+	if err = hif.t.ReadBlock(address, data); err != nil {
 		return err
 	}
 
@@ -308,148 +341,148 @@ func (hif *Hif) Send(group GroupId, opcode OpcodeId, control, data []byte, offse
 	hif.mutex.Lock()
 	defer hif.mutex.Unlock()
 
-	// Initialize the length to the size of the header
-	length := uint16(8)
+	debug.DEBUG("HIF: Send - BEGIN")
+	defer debug.DEBUG("HIF: Send - END")
 
-	if data != nil {
-		// Add the length of the data buffer including the offset
-		length += offset + uint16(len(data))
-	} else {
-		// Add the length of the control buffer
-		length += uint16(len(control))
+	strHif := types.HifHdr{
+		U8Gid:     byte(group),
+		U8Opcode:  byte(opcode) & ^byte(types.NBIT7),
+		U16Length: HIF_HDR_OFFSET, //uint16(types.M2M_HIF_HDR_OFFSET),
 	}
 
-	if length <= _hifMaxPacketSize {
-		// Wake the client device
+	if dataLen := len(data); dataLen > 0 {
+		// Add length of data and the offset
+		strHif.U16Length += offset + uint16(dataLen)
+	} else {
+		// Add just the length of the control struct
+		strHif.U16Length += uint16(len(control))
+	}
+
+	if strHif.U16Length < types.M2M_HIF_MAX_PACKET_SIZE {
+		// Wake the chip before sending the HIF packet
 		if err = hif.chipWakeInternal(); err != nil {
 			return err
 		}
 
-		// Prepare to interrupt the client device
-		reg := uint32(0)
+		var reg uint32
 		reg |= uint32(group)
 		reg |= uint32(opcode) << 8
-		reg |= uint32(length) << 16
+		reg |= uint32(strHif.U16Length) << 16
 
-		if err = hif.t.writeRegister(_NMI_STATE_REG, reg); err != nil {
-			// TODO: This fail state clears the chip sleep context state since the chip will automatically go into
-			//       a sleep state upon bus error. This implementation does not track the sleep state
+		if err = hif.WriteRegister(_NMI_STATE_REG, reg); err != nil {
 			return err
 		}
 
-		// Now interrupt the client device
-		reg = 0
-		reg |= _NBIT1
-		if err = hif.t.writeRegister(_WIFI_HOST_RCV_CTRL_2, reg); err != nil {
-			// TODO: Same as the one on line 223
+		if err = hif.WriteRegister(_WIFI_HOST_RCV_CTRL_2, types.NBIT1); err != nil {
 			return err
 		}
 
-		// Poll for DMA address
-		var dmaAddress uint32
-		timeout1 := time.Now().Add(time.Millisecond * 500)
-		timeout2 := time.Now().Add(time.Second)
-		for {
-			if time.Now().After(timeout2) {
-				// Stop polling because of timeout exceeded
-				break
-			}
-
-			if reg, err = hif.t.readRegister(_WIFI_HOST_RCV_CTRL_2); err != nil {
-				break
-			}
-
-			if time.Now().After(timeout1) {
-				// Start slowing down the reads
-				time.Sleep(time.Millisecond)
-			}
-
-			if (reg & _NBIT1) == 0 {
-				if dmaAddress, err = hif.t.readRegister(_WIFI_HOST_RCV_CTRL_4); err != nil {
-					// TODO: Same as the one on line 223
-					return err
-				}
-
-				// Stop polling
-				break
-			}
-		}
-
-		if dmaAddress != 0 {
-			baseAddress := dmaAddress
-			address := baseAddress
-
-			// Now write the header
-			if err = hif.writeHeader(uint8(group), uint8(opcode), length, address); err != nil {
-				// TODO: Same as the one on line 223
+		var dmaAddr uint32
+		for cnt := 0; cnt < 1000; cnt++ {
+			if reg, err = hif.ReadRegister(_WIFI_HOST_RCV_CTRL_2); err != nil {
 				return err
 			}
 
-			// Offset past the header
-			address += 8
+			// Throttle requests after 500 retries
+			if cnt > 500 {
+				if cnt < 501 {
+					debug.DEBUG("HIF: Slowing down...")
+				}
+				time.Sleep(time.Nanosecond)
+			}
 
-			if control != nil {
-				// Write the control buffer
-				if err = hif.t.writeBlock(address, control); err != nil {
+			if reg&types.NBIT1 == 0 {
+				if dmaAddr, err = hif.ReadRegister(_WIFI_HOST_RCV_CTRL_4); err != nil {
+					return err
+				}
+				break
+			}
+		}
+
+		if dmaAddr != 0 {
+			currentAddr := dmaAddr
+			debug.DEBUG("HIF: Writing HIF header.")
+			debug.DEBUG("HIF: strHif.U8Gid: %#v", strHif.U8Gid)
+			debug.DEBUG("HIF: strHif.U8Opcode: %v", strHif.U8Opcode)
+			debug.DEBUG("HIF: strHif.U16Length: %v", strHif.U16Length)
+			debug.DEBUG("HIF: currentAddr: %#x", currentAddr)
+
+			// NOTE: The HIF header is transmitted in 8 bytes even though the struct itself is 4 bytes.
+			var hifHeader [HIF_HDR_OFFSET]byte
+			copy(hifHeader[:], strHif.Bytes())
+
+			if err = hif.t.WriteBlock(currentAddr, hifHeader[:]); err != nil {
+				return err
+			}
+
+			debug.DEBUG("HIF: Done writing HIF header.")
+			currentAddr += HIF_HDR_OFFSET
+
+			if len(control) > 0 {
+				debug.DEBUG("HIF: Writing control bytes.")
+				debug.DEBUG("HIF: length: %v", len(control))
+				debug.DEBUG("HIF: currentAddr: %#x", currentAddr)
+
+				if err = hif.WriteBlock(currentAddr, control); err != nil {
 					return err
 				}
 
-				// Offset past the control buffer
-				address += uint32(len(control))
+				currentAddr += uint32(len(control))
+				debug.DEBUG("HIF: Done writing control bytes")
 			}
 
-			if data != nil {
-				// Write the data buffer
-				// NOTE: The original driver seemingly overwrites the control buffer
-				address += uint32(offset) - uint32(len(control))
+			if len(data) > 0 {
+				debug.DEBUG("HIF: Writing data bytes.")
+				debug.DEBUG("HIF: length: %v", len(data))
+				debug.DEBUG("HIF: currentAddr: %#x", currentAddr)
 
-				// Write the data buffer
-				if err = hif.t.writeBlock(address, data); err != nil {
-					// TODO: Same as the one on line 223
+				// Advance address before writing the data so that it is written at the correct offset.
+				currentAddr += uint32(offset - uint16(len(control)))
+				if err = hif.WriteBlock(currentAddr, data); err != nil {
 					return err
 				}
-				address += uint32(len(data))
+
+				debug.DEBUG("HIF: Done writing data bytes.")
 			}
 
-			// Raise TX done interrupt
-			reg = baseAddress << 2
-			reg |= _NBIT1
-			if err = hif.t.writeRegister(_WIFI_HOST_RCV_CTRL_3, reg); err != nil {
-				// TODO: Same as the one on line 223
+			reg = dmaAddr << 2
+			reg |= types.NBIT1
+			if err = hif.WriteRegister(_WIFI_HOST_RCV_CTRL_3, reg); err != nil {
 				return err
 			}
 		} else {
-			// Put the client device back to sleep and fail
-			if err = hif.chipSleepInternal(); err != nil {
-				return
+			debug.DEBUG("HIF: Failed to receive DMA address")
+			if err = hif.ChipSleep(); err != nil {
+				debug.DEBUG("HIF: hif.ChipSleep - %v", err)
+				return err
 			}
-
 			return errBadMemoryAlloc
 		}
 	} else {
 		return errMessageTooLong
 	}
 
-	return hif.chipSleepInternal()
+	hif.chipSleepInternal()
+	return
 }
 
 func (hif *Hif) waitForBootrom() error {
 	// Wait for efuse loading
 	for {
-		if value, _ := hif.t.readRegister(0x1014); value&0x80000000 != 0 {
+		if value, _ := hif.t.ReadRegister(0x1014); value&0x80000000 != 0 {
 			break
 		}
 		time.Sleep(time.Millisecond)
 	}
 
-	value, _ := hif.t.readRegister(_WAIT_FOR_HOST_REG)
+	value, _ := hif.t.ReadRegister(_WAIT_FOR_HOST_REG)
 	value &= 0x1
 
 	timeout := time.Now().Add(time.Millisecond * 0x2000)
 
 	// Check whether waiting on the host should be skipped
 	if value == 0 {
-		for value, _ = hif.t.readRegister(_BOOTROM_REG); uint64(value) != _FINISH_BOOT_ROM; {
+		for value, _ = hif.t.ReadRegister(_BOOTROM_REG); uint64(value) != _FINISH_BOOT_ROM; {
 			if time.Now().After(timeout) {
 				return errFirmwareLoadFailed
 			}
@@ -459,7 +492,7 @@ func (hif *Hif) waitForBootrom() error {
 	}
 
 	// Write the version info
-	err := hif.t.writeRegister(_NMI_STATE_REG, _VERSION)
+	err := hif.t.WriteRegister(_NMI_STATE_REG, _VERSION)
 	if err != nil {
 		return err
 	}
@@ -471,13 +504,13 @@ func (hif *Hif) waitForBootrom() error {
 	}
 
 	// Start the firmware
-	return hif.t.writeRegister(_BOOTROM_REG, uint32(_START_FIRMWARE))
+	return hif.t.WriteRegister(_BOOTROM_REG, uint32(_START_FIRMWARE))
 }
 
 func (hif *Hif) waitForFirmwareStart() error {
 	timeout := time.Now().Add(time.Millisecond * 0x2000)
 	for {
-		if value, _ := hif.t.readRegister(_NMI_STATE_REG); uint64(value) != _FINISH_INIT_STATE {
+		if value, _ := hif.t.ReadRegister(_NMI_STATE_REG); uint64(value) != _FINISH_INIT_STATE {
 			if time.Now().After(timeout) {
 				return errFirmwareTimeout
 			}
@@ -489,30 +522,30 @@ func (hif *Hif) waitForFirmwareStart() error {
 	}
 
 	// Clear the state register
-	hif.t.writeRegister(_NMI_STATE_REG, 0)
+	hif.t.WriteRegister(_NMI_STATE_REG, 0)
 
 	return nil
 }
 
 func (hif *Hif) enableInterrupts() error {
 	// Interrupt pin mux select
-	value, err := hif.t.readRegister(_NMI_PIN_MUX_0)
+	value, err := hif.t.ReadRegister(_NMI_PIN_MUX_0)
 	if err != nil {
 		return err
 	}
 
 	value |= 1 << 8
-	if err = hif.t.writeRegister(_NMI_PIN_MUX_0, value); err != nil {
+	if err = hif.t.WriteRegister(_NMI_PIN_MUX_0, value); err != nil {
 		return err
 	}
 
 	// Enable the interrupt for the pin
-	if value, err = hif.t.readRegister(_NMI_INTR_ENABLE); err != nil {
+	if value, err = hif.t.ReadRegister(_NMI_INTR_ENABLE); err != nil {
 		return err
 	}
 
 	value |= 1 << 16
-	if err = hif.t.writeRegister(_NMI_INTR_ENABLE, value); err != nil {
+	if err = hif.t.WriteRegister(_NMI_INTR_ENABLE, value); err != nil {
 		return err
 	}
 
@@ -522,9 +555,9 @@ func (hif *Hif) enableInterrupts() error {
 func (hif *Hif) applyChipConfig(conf uint32) error {
 	conf |= _HAVE_RESERVED1_BIT
 	for {
-		hif.t.writeRegister(_NMI_GP_REG_1, conf)
+		hif.t.WriteRegister(_NMI_GP_REG_1, conf)
 		if conf != 0 {
-			if value, err := hif.t.readRegister(_NMI_GP_REG_1); err == nil && value == conf {
+			if value, err := hif.t.ReadRegister(_NMI_GP_REG_1); err == nil && value == conf {
 				break
 			}
 		} else {
@@ -545,7 +578,7 @@ func (hif *Hif) writeHeader(groupId, opcode uint8, length uint16, address uint32
 	}
 
 	// Write the header
-	if err = hif.t.writeBlock(address, data[:]); err != nil {
+	if err = hif.t.WriteBlock(address, data[:]); err != nil {
 		return
 	}
 
@@ -554,7 +587,7 @@ func (hif *Hif) writeHeader(groupId, opcode uint8, length uint16, address uint32
 
 func (hif *Hif) readHeader(address uint32) (group GroupId, opcode OpcodeId, length uint16, err error) {
 	var data [4]byte
-	if err = hif.t.readBlock(address, data[:]); err != nil {
+	if err = hif.t.ReadBlock(address, data[:]); err != nil {
 		return
 	}
 
@@ -570,13 +603,13 @@ func (hif *Hif) readHeader(address uint32) (group GroupId, opcode OpcodeId, leng
 func (hif *Hif) setRxDone() (err error) {
 	volatile.StoreUint8(&rxDone, 0)
 	var reg uint32
-	if reg, err = hif.t.readRegister(_WIFI_HOST_RCV_CTRL_0); err != nil {
+	if reg, err = hif.t.ReadRegister(_WIFI_HOST_RCV_CTRL_0); err != nil {
 		return err
 	}
 
 	// Set RX done
 	reg |= _NBIT1
-	if err = hif.t.writeRegister(_WIFI_HOST_RCV_CTRL_0, reg); err != nil {
+	if err = hif.t.WriteRegister(_WIFI_HOST_RCV_CTRL_0, reg); err != nil {
 		return err
 	}
 
@@ -593,7 +626,7 @@ func (hif *Hif) Isr() (err error) {
 
 	// Receive RX interrupt state
 	var reg uint32
-	if reg, err = hif.t.readRegister(_WIFI_HOST_RCV_CTRL_0); err != nil {
+	if reg, err = hif.t.ReadRegister(_WIFI_HOST_RCV_CTRL_0); err != nil {
 		return
 	}
 
@@ -601,7 +634,7 @@ func (hif *Hif) Isr() (err error) {
 	if reg&0x1 != 0 {
 		// Clear RX interrupt
 		reg &= ^_NBIT0
-		if err = hif.t.writeRegister(_WIFI_HOST_RCV_CTRL_0, reg); err != nil {
+		if err = hif.t.WriteRegister(_WIFI_HOST_RCV_CTRL_0, reg); err != nil {
 			return
 		}
 	}
@@ -614,7 +647,7 @@ func (hif *Hif) Isr() (err error) {
 	if size > 0 {
 		// Start the bus transfer
 		var address uint32
-		if address, err = hif.t.readRegister(_WIFI_HOST_RCV_CTRL_1); err != nil {
+		if address, err = hif.t.ReadRegister(_WIFI_HOST_RCV_CTRL_1); err != nil {
 			return
 		}
 
@@ -686,7 +719,7 @@ func (hif *Hif) SetGPIODirection(gpio, direction uint8) (err error) {
 	defer hif.mutex.Unlock()
 
 	var value uint32
-	if value, err = hif.t.readRegister(0x20108); err != nil {
+	if value, err = hif.t.ReadRegister(0x20108); err != nil {
 		return
 	}
 
@@ -696,7 +729,7 @@ func (hif *Hif) SetGPIODirection(gpio, direction uint8) (err error) {
 		value &= ^(1 << gpio)
 	}
 
-	return hif.t.writeRegister(0x20108, value)
+	return hif.t.WriteRegister(0x20108, value)
 }
 
 func (hif *Hif) SetGPIOValue(gpio, state uint8) (err error) {
@@ -704,7 +737,7 @@ func (hif *Hif) SetGPIOValue(gpio, state uint8) (err error) {
 	defer hif.mutex.Unlock()
 
 	var value uint32
-	if value, err = hif.t.readRegister(0x20100); err != nil {
+	if value, err = hif.t.ReadRegister(0x20100); err != nil {
 		return
 	}
 
@@ -714,7 +747,7 @@ func (hif *Hif) SetGPIOValue(gpio, state uint8) (err error) {
 		value &= ^(1 << gpio)
 	}
 
-	return hif.t.writeRegister(0x20100, value)
+	return hif.t.WriteRegister(0x20100, value)
 }
 
 func (hif *Hif) GetGPIOValue(gpio uint8) (state uint8, err error) {
@@ -722,11 +755,57 @@ func (hif *Hif) GetGPIOValue(gpio uint8) (state uint8, err error) {
 	defer hif.mutex.Unlock()
 
 	var value uint32
-	if value, err = hif.t.readRegister(0x142C); err != nil {
+	if value, err = hif.t.ReadRegister(0x142C); err != nil {
 		return
 	}
 
 	state = uint8(value>>gpio) & 0x01
 
 	return
+}
+
+func (hif *Hif) Halt() error {
+	reg, err := hif.t.ReadRegister(0x1118)
+	if err != nil {
+		return err
+	}
+
+	reg |= 1 << 0
+
+	if err = hif.t.WriteRegister(0x1118, reg); err != nil {
+		return err
+	}
+
+	if reg, err = hif.t.ReadRegister(_NMI_GLB_RESET_0); err != nil {
+		return err
+	}
+
+	if (reg & (1 << 10)) == (1 << 10) {
+		reg &= ^uint32(1 << 10)
+		if err = hif.t.WriteRegister(_NMI_GLB_RESET_0, reg); err != nil {
+			return err
+		}
+
+		if reg, err = hif.t.ReadRegister(_NMI_GLB_RESET_0); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (hif *Hif) ReadRegister(address uint32) (uint32, error) {
+	return hif.t.ReadRegister(address)
+}
+
+func (hif *Hif) WriteRegister(address, value uint32) error {
+	return hif.t.WriteRegister(address, value)
+}
+
+func (hif *Hif) ReadBlock(address uint32, data []byte) (err error) {
+	return hif.t.ReadBlock(address, data)
+}
+
+func (hif *Hif) WriteBlock(address uint32, data []byte) (err error) {
+	return hif.t.WriteBlock(address, data)
 }

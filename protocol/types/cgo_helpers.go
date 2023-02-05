@@ -8,6 +8,8 @@ package types
 #include "../include/socket.h"
 #include "../include/m2m_socket_host_if.h"
 #include "../include/m2m_hif.h"
+#include "../include/ecc_types.h"
+#include "../include/wdrv_winc_ssl.h"
 #include <stdlib.h>
 #include "cgo_helpers.h"
 */
@@ -66,6 +68,658 @@ func (a *cgoAllocMap) Free() {
 		delete(a.m, ptr)
 	}
 	a.mux.Unlock()
+}
+
+// allocECPointMemory allocates memory for type C.tstrECPoint in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocECPointMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfECPointValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfECPointValue = unsafe.Sizeof([1]C.tstrECPoint{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *ECPoint) Ref() *C.tstrECPoint {
+	if x == nil {
+		return nil
+	}
+	return x.ref5481a313
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *ECPoint) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref5481a313)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *ECPoint) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *ECPoint) Free() {
+	if x != nil && x.allocs5481a313 != nil {
+		x.allocs5481a313.(*cgoAllocMap).Free()
+		x.ref5481a313 = nil
+	}
+}
+
+// NewECPointRef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewECPointRef(ref unsafe.Pointer) *ECPoint {
+	if ref == nil {
+		return nil
+	}
+	obj := new(ECPoint)
+	obj.ref5481a313 = (*C.tstrECPoint)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *ECPoint) PassRef() (*C.tstrECPoint, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref5481a313 != nil {
+		return x.ref5481a313, nil
+	}
+	mem5481a313 := allocECPointMemory(1)
+	ref5481a313 := (*C.tstrECPoint)(mem5481a313)
+	allocs5481a313 := new(cgoAllocMap)
+	allocs5481a313.Add(mem5481a313)
+
+	var cXY_allocs *cgoAllocMap
+	ref5481a313.XY, cXY_allocs = *(*[64]C.uint8_t)(unsafe.Pointer(&x.XY)), cgoAllocsUnknown
+	allocs5481a313.Borrow(cXY_allocs)
+
+	var cu16Size_allocs *cgoAllocMap
+	ref5481a313.u16Size, cu16Size_allocs = (C.uint16_t)(x.U16Size), cgoAllocsUnknown
+	allocs5481a313.Borrow(cu16Size_allocs)
+
+	var cu16PrivKeyID_allocs *cgoAllocMap
+	ref5481a313.u16PrivKeyID, cu16PrivKeyID_allocs = (C.uint16_t)(x.U16PrivKeyID), cgoAllocsUnknown
+	allocs5481a313.Borrow(cu16PrivKeyID_allocs)
+
+	x.ref5481a313 = ref5481a313
+	x.allocs5481a313 = allocs5481a313
+	return ref5481a313, allocs5481a313
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x ECPoint) PassValue() (C.tstrECPoint, *cgoAllocMap) {
+	if x.ref5481a313 != nil {
+		return *x.ref5481a313, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *ECPoint) Deref() {
+	if x.ref5481a313 == nil {
+		return
+	}
+	x.XY = *(*[64]byte)(unsafe.Pointer(&x.ref5481a313.XY))
+	x.U16Size = (uint16)(x.ref5481a313.u16Size)
+	x.U16PrivKeyID = (uint16)(x.ref5481a313.u16PrivKeyID)
+}
+
+// allocECDomainParamMemory allocates memory for type C.tstrECDomainParam in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocECDomainParamMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfECDomainParamValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfECDomainParamValue = unsafe.Sizeof([1]C.tstrECDomainParam{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *ECDomainParam) Ref() *C.tstrECDomainParam {
+	if x == nil {
+		return nil
+	}
+	return x.ref305aa0bf
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *ECDomainParam) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref305aa0bf)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *ECDomainParam) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *ECDomainParam) Free() {
+	if x != nil && x.allocs305aa0bf != nil {
+		x.allocs305aa0bf.(*cgoAllocMap).Free()
+		x.ref305aa0bf = nil
+	}
+}
+
+// NewECDomainParamRef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewECDomainParamRef(ref unsafe.Pointer) *ECDomainParam {
+	if ref == nil {
+		return nil
+	}
+	obj := new(ECDomainParam)
+	obj.ref305aa0bf = (*C.tstrECDomainParam)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *ECDomainParam) PassRef() (*C.tstrECDomainParam, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref305aa0bf != nil {
+		return x.ref305aa0bf, nil
+	}
+	mem305aa0bf := allocECDomainParamMemory(1)
+	ref305aa0bf := (*C.tstrECDomainParam)(mem305aa0bf)
+	allocs305aa0bf := new(cgoAllocMap)
+	allocs305aa0bf.Add(mem305aa0bf)
+
+	var cp_allocs *cgoAllocMap
+	ref305aa0bf.p, cp_allocs = *(*[8]C.uint32_t)(unsafe.Pointer(&x.P)), cgoAllocsUnknown
+	allocs305aa0bf.Borrow(cp_allocs)
+
+	var ca_allocs *cgoAllocMap
+	ref305aa0bf.a, ca_allocs = *(*[8]C.uint32_t)(unsafe.Pointer(&x.A)), cgoAllocsUnknown
+	allocs305aa0bf.Borrow(ca_allocs)
+
+	var cb_allocs *cgoAllocMap
+	ref305aa0bf.b, cb_allocs = *(*[8]C.uint32_t)(unsafe.Pointer(&x.B)), cgoAllocsUnknown
+	allocs305aa0bf.Borrow(cb_allocs)
+
+	var cG_allocs *cgoAllocMap
+	ref305aa0bf.G, cG_allocs = x.G.PassValue()
+	allocs305aa0bf.Borrow(cG_allocs)
+
+	x.ref305aa0bf = ref305aa0bf
+	x.allocs305aa0bf = allocs305aa0bf
+	return ref305aa0bf, allocs305aa0bf
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x ECDomainParam) PassValue() (C.tstrECDomainParam, *cgoAllocMap) {
+	if x.ref305aa0bf != nil {
+		return *x.ref305aa0bf, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *ECDomainParam) Deref() {
+	if x.ref305aa0bf == nil {
+		return
+	}
+	x.P = *(*[8]uint32)(unsafe.Pointer(&x.ref305aa0bf.p))
+	x.A = *(*[8]uint32)(unsafe.Pointer(&x.ref305aa0bf.a))
+	x.B = *(*[8]uint32)(unsafe.Pointer(&x.ref305aa0bf.b))
+	x.G = *NewECPointRef(unsafe.Pointer(&x.ref305aa0bf.G))
+}
+
+// allocEllipticCurveMemory allocates memory for type C.tstrEllipticCurve in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocEllipticCurveMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfEllipticCurveValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfEllipticCurveValue = unsafe.Sizeof([1]C.tstrEllipticCurve{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *EllipticCurve) Ref() *C.tstrEllipticCurve {
+	if x == nil {
+		return nil
+	}
+	return x.ref4d97526a
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *EllipticCurve) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref4d97526a)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *EllipticCurve) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *EllipticCurve) Free() {
+	if x != nil && x.allocs4d97526a != nil {
+		x.allocs4d97526a.(*cgoAllocMap).Free()
+		x.ref4d97526a = nil
+	}
+}
+
+// NewEllipticCurveRef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewEllipticCurveRef(ref unsafe.Pointer) *EllipticCurve {
+	if ref == nil {
+		return nil
+	}
+	obj := new(EllipticCurve)
+	obj.ref4d97526a = (*C.tstrEllipticCurve)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *EllipticCurve) PassRef() (*C.tstrEllipticCurve, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref4d97526a != nil {
+		return x.ref4d97526a, nil
+	}
+	mem4d97526a := allocEllipticCurveMemory(1)
+	ref4d97526a := (*C.tstrEllipticCurve)(mem4d97526a)
+	allocs4d97526a := new(cgoAllocMap)
+	allocs4d97526a.Add(mem4d97526a)
+
+	var cenuType_allocs *cgoAllocMap
+	ref4d97526a.enuType, cenuType_allocs = (C.tenuEcNamedCurve)(x.EnuType), cgoAllocsUnknown
+	allocs4d97526a.Borrow(cenuType_allocs)
+
+	var cstrParam_allocs *cgoAllocMap
+	ref4d97526a.strParam, cstrParam_allocs = x.StrParam.PassValue()
+	allocs4d97526a.Borrow(cstrParam_allocs)
+
+	x.ref4d97526a = ref4d97526a
+	x.allocs4d97526a = allocs4d97526a
+	return ref4d97526a, allocs4d97526a
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x EllipticCurve) PassValue() (C.tstrEllipticCurve, *cgoAllocMap) {
+	if x.ref4d97526a != nil {
+		return *x.ref4d97526a, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *EllipticCurve) Deref() {
+	if x.ref4d97526a == nil {
+		return
+	}
+	x.EnuType = (EnumEcNamedCurve)(x.ref4d97526a.enuType)
+	x.StrParam = *NewECDomainParamRef(unsafe.Pointer(&x.ref4d97526a.strParam))
+}
+
+// allocEcdhReqInfoMemory allocates memory for type C.tstrEcdhReqInfo in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocEcdhReqInfoMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfEcdhReqInfoValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfEcdhReqInfoValue = unsafe.Sizeof([1]C.tstrEcdhReqInfo{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *EcdhReqInfo) Ref() *C.tstrEcdhReqInfo {
+	if x == nil {
+		return nil
+	}
+	return x.ref82b1acca
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *EcdhReqInfo) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref82b1acca)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *EcdhReqInfo) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *EcdhReqInfo) Free() {
+	if x != nil && x.allocs82b1acca != nil {
+		x.allocs82b1acca.(*cgoAllocMap).Free()
+		x.ref82b1acca = nil
+	}
+}
+
+// NewEcdhReqInfoRef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewEcdhReqInfoRef(ref unsafe.Pointer) *EcdhReqInfo {
+	if ref == nil {
+		return nil
+	}
+	obj := new(EcdhReqInfo)
+	obj.ref82b1acca = (*C.tstrEcdhReqInfo)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *EcdhReqInfo) PassRef() (*C.tstrEcdhReqInfo, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref82b1acca != nil {
+		return x.ref82b1acca, nil
+	}
+	mem82b1acca := allocEcdhReqInfoMemory(1)
+	ref82b1acca := (*C.tstrEcdhReqInfo)(mem82b1acca)
+	allocs82b1acca := new(cgoAllocMap)
+	allocs82b1acca.Add(mem82b1acca)
+
+	var cu16REQ_allocs *cgoAllocMap
+	ref82b1acca.u16REQ, cu16REQ_allocs = (C.uint16_t)(x.U16REQ), cgoAllocsUnknown
+	allocs82b1acca.Borrow(cu16REQ_allocs)
+
+	var cu16Status_allocs *cgoAllocMap
+	ref82b1acca.u16Status, cu16Status_allocs = (C.uint16_t)(x.U16Status), cgoAllocsUnknown
+	allocs82b1acca.Borrow(cu16Status_allocs)
+
+	var cu32UserData_allocs *cgoAllocMap
+	ref82b1acca.u32UserData, cu32UserData_allocs = (C.uint32_t)(x.U32UserData), cgoAllocsUnknown
+	allocs82b1acca.Borrow(cu32UserData_allocs)
+
+	var cu32SeqNo_allocs *cgoAllocMap
+	ref82b1acca.u32SeqNo, cu32SeqNo_allocs = (C.uint32_t)(x.U32SeqNo), cgoAllocsUnknown
+	allocs82b1acca.Borrow(cu32SeqNo_allocs)
+
+	var cstrPubKey_allocs *cgoAllocMap
+	ref82b1acca.strPubKey, cstrPubKey_allocs = x.StrPubKey.PassValue()
+	allocs82b1acca.Borrow(cstrPubKey_allocs)
+
+	var cau8Key_allocs *cgoAllocMap
+	ref82b1acca.au8Key, cau8Key_allocs = *(*[32]C.uint8_t)(unsafe.Pointer(&x.Au8Key)), cgoAllocsUnknown
+	allocs82b1acca.Borrow(cau8Key_allocs)
+
+	x.ref82b1acca = ref82b1acca
+	x.allocs82b1acca = allocs82b1acca
+	return ref82b1acca, allocs82b1acca
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x EcdhReqInfo) PassValue() (C.tstrEcdhReqInfo, *cgoAllocMap) {
+	if x.ref82b1acca != nil {
+		return *x.ref82b1acca, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *EcdhReqInfo) Deref() {
+	if x.ref82b1acca == nil {
+		return
+	}
+	x.U16REQ = (uint16)(x.ref82b1acca.u16REQ)
+	x.U16Status = (uint16)(x.ref82b1acca.u16Status)
+	x.U32UserData = (uint32)(x.ref82b1acca.u32UserData)
+	x.U32SeqNo = (uint32)(x.ref82b1acca.u32SeqNo)
+	x.StrPubKey = *NewECPointRef(unsafe.Pointer(&x.ref82b1acca.strPubKey))
+	x.Au8Key = *(*[32]byte)(unsafe.Pointer(&x.ref82b1acca.au8Key))
+}
+
+// allocEcdsaVerifyReqInfoMemory allocates memory for type C.tstrEcdsaVerifyReqInfo in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocEcdsaVerifyReqInfoMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfEcdsaVerifyReqInfoValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfEcdsaVerifyReqInfoValue = unsafe.Sizeof([1]C.tstrEcdsaVerifyReqInfo{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *EcdsaVerifyReqInfo) Ref() *C.tstrEcdsaVerifyReqInfo {
+	if x == nil {
+		return nil
+	}
+	return x.ref38d99f76
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *EcdsaVerifyReqInfo) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref38d99f76)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *EcdsaVerifyReqInfo) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *EcdsaVerifyReqInfo) Free() {
+	if x != nil && x.allocs38d99f76 != nil {
+		x.allocs38d99f76.(*cgoAllocMap).Free()
+		x.ref38d99f76 = nil
+	}
+}
+
+// NewEcdsaVerifyReqInfoRef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewEcdsaVerifyReqInfoRef(ref unsafe.Pointer) *EcdsaVerifyReqInfo {
+	if ref == nil {
+		return nil
+	}
+	obj := new(EcdsaVerifyReqInfo)
+	obj.ref38d99f76 = (*C.tstrEcdsaVerifyReqInfo)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *EcdsaVerifyReqInfo) PassRef() (*C.tstrEcdsaVerifyReqInfo, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref38d99f76 != nil {
+		return x.ref38d99f76, nil
+	}
+	mem38d99f76 := allocEcdsaVerifyReqInfoMemory(1)
+	ref38d99f76 := (*C.tstrEcdsaVerifyReqInfo)(mem38d99f76)
+	allocs38d99f76 := new(cgoAllocMap)
+	allocs38d99f76.Add(mem38d99f76)
+
+	var cu16REQ_allocs *cgoAllocMap
+	ref38d99f76.u16REQ, cu16REQ_allocs = (C.uint16_t)(x.U16REQ), cgoAllocsUnknown
+	allocs38d99f76.Borrow(cu16REQ_allocs)
+
+	var cu16Status_allocs *cgoAllocMap
+	ref38d99f76.u16Status, cu16Status_allocs = (C.uint16_t)(x.U16Status), cgoAllocsUnknown
+	allocs38d99f76.Borrow(cu16Status_allocs)
+
+	var cu32UserData_allocs *cgoAllocMap
+	ref38d99f76.u32UserData, cu32UserData_allocs = (C.uint32_t)(x.U32UserData), cgoAllocsUnknown
+	allocs38d99f76.Borrow(cu32UserData_allocs)
+
+	var cu32SeqNo_allocs *cgoAllocMap
+	ref38d99f76.u32SeqNo, cu32SeqNo_allocs = (C.uint32_t)(x.U32SeqNo), cgoAllocsUnknown
+	allocs38d99f76.Borrow(cu32SeqNo_allocs)
+
+	var cu32nSig_allocs *cgoAllocMap
+	ref38d99f76.u32nSig, cu32nSig_allocs = (C.uint32_t)(x.U32nSig), cgoAllocsUnknown
+	allocs38d99f76.Borrow(cu32nSig_allocs)
+
+	x.ref38d99f76 = ref38d99f76
+	x.allocs38d99f76 = allocs38d99f76
+	return ref38d99f76, allocs38d99f76
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x EcdsaVerifyReqInfo) PassValue() (C.tstrEcdsaVerifyReqInfo, *cgoAllocMap) {
+	if x.ref38d99f76 != nil {
+		return *x.ref38d99f76, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *EcdsaVerifyReqInfo) Deref() {
+	if x.ref38d99f76 == nil {
+		return
+	}
+	x.U16REQ = (uint16)(x.ref38d99f76.u16REQ)
+	x.U16Status = (uint16)(x.ref38d99f76.u16Status)
+	x.U32UserData = (uint32)(x.ref38d99f76.u32UserData)
+	x.U32SeqNo = (uint32)(x.ref38d99f76.u32SeqNo)
+	x.U32nSig = (uint32)(x.ref38d99f76.u32nSig)
+}
+
+// allocEcdsaSignReqInfoMemory allocates memory for type C.tstrEcdsaSignReqInfo in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocEcdsaSignReqInfoMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfEcdsaSignReqInfoValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfEcdsaSignReqInfoValue = unsafe.Sizeof([1]C.tstrEcdsaSignReqInfo{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *EcdsaSignReqInfo) Ref() *C.tstrEcdsaSignReqInfo {
+	if x == nil {
+		return nil
+	}
+	return x.ref520501e6
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *EcdsaSignReqInfo) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref520501e6)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *EcdsaSignReqInfo) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *EcdsaSignReqInfo) Free() {
+	if x != nil && x.allocs520501e6 != nil {
+		x.allocs520501e6.(*cgoAllocMap).Free()
+		x.ref520501e6 = nil
+	}
+}
+
+// NewEcdsaSignReqInfoRef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewEcdsaSignReqInfoRef(ref unsafe.Pointer) *EcdsaSignReqInfo {
+	if ref == nil {
+		return nil
+	}
+	obj := new(EcdsaSignReqInfo)
+	obj.ref520501e6 = (*C.tstrEcdsaSignReqInfo)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *EcdsaSignReqInfo) PassRef() (*C.tstrEcdsaSignReqInfo, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref520501e6 != nil {
+		return x.ref520501e6, nil
+	}
+	mem520501e6 := allocEcdsaSignReqInfoMemory(1)
+	ref520501e6 := (*C.tstrEcdsaSignReqInfo)(mem520501e6)
+	allocs520501e6 := new(cgoAllocMap)
+	allocs520501e6.Add(mem520501e6)
+
+	var cu16REQ_allocs *cgoAllocMap
+	ref520501e6.u16REQ, cu16REQ_allocs = (C.uint16_t)(x.U16REQ), cgoAllocsUnknown
+	allocs520501e6.Borrow(cu16REQ_allocs)
+
+	var cu16Status_allocs *cgoAllocMap
+	ref520501e6.u16Status, cu16Status_allocs = (C.uint16_t)(x.U16Status), cgoAllocsUnknown
+	allocs520501e6.Borrow(cu16Status_allocs)
+
+	var cu32UserData_allocs *cgoAllocMap
+	ref520501e6.u32UserData, cu32UserData_allocs = (C.uint32_t)(x.U32UserData), cgoAllocsUnknown
+	allocs520501e6.Borrow(cu32UserData_allocs)
+
+	var cu32SeqNo_allocs *cgoAllocMap
+	ref520501e6.u32SeqNo, cu32SeqNo_allocs = (C.uint32_t)(x.U32SeqNo), cgoAllocsUnknown
+	allocs520501e6.Borrow(cu32SeqNo_allocs)
+
+	var cu16CurveType_allocs *cgoAllocMap
+	ref520501e6.u16CurveType, cu16CurveType_allocs = (C.uint16_t)(x.U16CurveType), cgoAllocsUnknown
+	allocs520501e6.Borrow(cu16CurveType_allocs)
+
+	var cu16HashSz_allocs *cgoAllocMap
+	ref520501e6.u16HashSz, cu16HashSz_allocs = (C.uint16_t)(x.U16HashSz), cgoAllocsUnknown
+	allocs520501e6.Borrow(cu16HashSz_allocs)
+
+	x.ref520501e6 = ref520501e6
+	x.allocs520501e6 = allocs520501e6
+	return ref520501e6, allocs520501e6
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x EcdsaSignReqInfo) PassValue() (C.tstrEcdsaSignReqInfo, *cgoAllocMap) {
+	if x.ref520501e6 != nil {
+		return *x.ref520501e6, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *EcdsaSignReqInfo) Deref() {
+	if x.ref520501e6 == nil {
+		return
+	}
+	x.U16REQ = (uint16)(x.ref520501e6.u16REQ)
+	x.U16Status = (uint16)(x.ref520501e6.u16Status)
+	x.U32UserData = (uint32)(x.ref520501e6.u32UserData)
+	x.U32SeqNo = (uint32)(x.ref520501e6.u32SeqNo)
+	x.U16CurveType = (uint16)(x.ref520501e6.u16CurveType)
+	x.U16HashSz = (uint16)(x.ref520501e6.u16HashSz)
 }
 
 // allocHifHdrMemory allocates memory for type C.tstrHifHdr in C.
@@ -1608,6 +2262,7 @@ func (x *SendReply) PassRef() (*C.tstrSendReply, *cgoAllocMap) {
 	x.reffbd9c021 = reffbd9c021
 	x.allocsfbd9c021 = allocsfbd9c021
 	return reffbd9c021, allocsfbd9c021
+
 }
 
 // PassValue does the same as PassRef except that it will try to dereference the returned pointer.
@@ -7704,6 +8359,10 @@ func (x *M2MSNTPConfig) PassRef() (*C.tstrM2MSNTPConfig, *cgoAllocMap) {
 	ref649da0d7.acNTPServer, cacNTPServer_allocs = *(*[33]C.char)(unsafe.Pointer(&x.AcNTPServer)), cgoAllocsUnknown
 	allocs649da0d7.Borrow(cacNTPServer_allocs)
 
+	var cenuUseDHCP_allocs *cgoAllocMap
+	ref649da0d7.enuUseDHCP, cenuUseDHCP_allocs = (C.tenuSNTPUseDHCP)(x.EnuUseDHCP), cgoAllocsUnknown
+	allocs649da0d7.Borrow(cenuUseDHCP_allocs)
+
 	var c__PAD8___allocs *cgoAllocMap
 	ref649da0d7.__PAD8__, c__PAD8___allocs = *(*[2]C.uint8_t)(unsafe.Pointer(&x.__PAD8__)), cgoAllocsUnknown
 	allocs649da0d7.Borrow(c__PAD8___allocs)
@@ -7730,6 +8389,7 @@ func (x *M2MSNTPConfig) Deref() {
 		return
 	}
 	x.AcNTPServer = *(*[33]byte)(unsafe.Pointer(&x.ref649da0d7.acNTPServer))
+	x.EnuUseDHCP = (EnumSNTPUseDHCP)(x.ref649da0d7.enuUseDHCP)
 	x.__PAD8__ = *(*[2]byte)(unsafe.Pointer(&x.ref649da0d7.__PAD8__))
 }
 
@@ -7976,18 +8636,14 @@ func copyPUint8_tBytes(slice *sliceHeader) (*C.uint8_t, *cgoAllocMap) {
 		go a.Free()
 	})
 
-	//data := unsafe.Slice(slice.Data, slice.Len)
-	//mem0 := (*sliceHeader)(unsafe.Pointer(&data))
-
 	mem0 := unsafe.Pointer(C.CBytes(*(*[]byte)(unsafe.Pointer(&sliceHeader{
 		Data: slice.Data,
 		Len:  int(sizeOfUint8_tValue) * slice.Len,
 		Cap:  int(sizeOfUint8_tValue) * slice.Len,
 	}))))
-
 	allocs.Add(mem0)
 
-	return (*C.uint8_t)(slice.Data), allocs
+	return (*C.uint8_t)(mem0), allocs
 }
 
 type sliceHeader struct {
@@ -8174,6 +8830,14 @@ func (x *ConfAutoRate) PassRef() (*C.tstrConfAutoRate, *cgoAllocMap) {
 	ref330ce733.u16ArMinRecoveryFailThreshold, cu16ArMinRecoveryFailThreshold_allocs = (C.uint16_t)(x.U16ArMinRecoveryFailThreshold), cgoAllocsUnknown
 	allocs330ce733.Borrow(cu16ArMinRecoveryFailThreshold_allocs)
 
+	var cenuWlanTxRate_allocs *cgoAllocMap
+	ref330ce733.enuWlanTxRate, cenuWlanTxRate_allocs = (C.tenuWlanTxRate)(x.EnuWlanTxRate), cgoAllocsUnknown
+	allocs330ce733.Borrow(cenuWlanTxRate_allocs)
+
+	var cenuArInitialRateSel_allocs *cgoAllocMap
+	ref330ce733.enuArInitialRateSel, cenuArInitialRateSel_allocs = (C.tenuWlanTxRate)(x.EnuArInitialRateSel), cgoAllocsUnknown
+	allocs330ce733.Borrow(cenuArInitialRateSel_allocs)
+
 	var cu8ArEnoughTxThreshold_allocs *cgoAllocMap
 	ref330ce733.u8ArEnoughTxThreshold, cu8ArEnoughTxThreshold_allocs = (C.uint8_t)(x.U8ArEnoughTxThreshold), cgoAllocsUnknown
 	allocs330ce733.Borrow(cu8ArEnoughTxThreshold_allocs)
@@ -8213,6 +8877,8 @@ func (x *ConfAutoRate) Deref() {
 	}
 	x.U16ArMaxRecoveryFailThreshold = (uint16)(x.ref330ce733.u16ArMaxRecoveryFailThreshold)
 	x.U16ArMinRecoveryFailThreshold = (uint16)(x.ref330ce733.u16ArMinRecoveryFailThreshold)
+	x.EnuWlanTxRate = (EnumWlanTxRate)(x.ref330ce733.enuWlanTxRate)
+	x.EnuArInitialRateSel = (EnumWlanTxRate)(x.ref330ce733.enuArInitialRateSel)
 	x.U8ArEnoughTxThreshold = (byte)(x.ref330ce733.u8ArEnoughTxThreshold)
 	x.U8ArSuccessTXThreshold = (byte)(x.ref330ce733.u8ArSuccessTXThreshold)
 	x.U8ArFailTxThreshold = (byte)(x.ref330ce733.u8ArFailTxThreshold)
@@ -9901,6 +10567,10 @@ func (x *SockErr) PassRef() (*C.tstrSockErr, *cgoAllocMap) {
 	allocs7741dd47 := new(cgoAllocMap)
 	allocs7741dd47.Add(mem7741dd47)
 
+	var cenuErrSource_allocs *cgoAllocMap
+	ref7741dd47.enuErrSource, cenuErrSource_allocs = (C.tenuSockErrSource)(x.EnuErrSource), cgoAllocsUnknown
+	allocs7741dd47.Borrow(cenuErrSource_allocs)
+
 	var cu8ErrCode_allocs *cgoAllocMap
 	ref7741dd47.u8ErrCode, cu8ErrCode_allocs = (C.uint8_t)(x.U8ErrCode), cgoAllocsUnknown
 	allocs7741dd47.Borrow(cu8ErrCode_allocs)
@@ -9926,6 +10596,7 @@ func (x *SockErr) Deref() {
 	if x.ref7741dd47 == nil {
 		return
 	}
+	x.EnuErrSource = (EnumSockErrSource)(x.ref7741dd47.enuErrSource)
 	x.U8ErrCode = (byte)(x.ref7741dd47.u8ErrCode)
 }
 
@@ -10406,4 +11077,581 @@ func (x *SocketRecvMsg) Deref() {
 
 	x.S16BufferSize = (int16)(x.ref4cb67fc3.s16BufferSize)
 	x.U16RemainingSize = (uint16)(x.ref4cb67fc3.u16RemainingSize)
+}
+
+// allocEC_POINT_REPMemory allocates memory for type C.WDRV_WINC_EC_POINT_REP in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocEC_POINT_REPMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfEC_POINT_REPValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfEC_POINT_REPValue = unsafe.Sizeof([1]C.WDRV_WINC_EC_POINT_REP{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *EC_POINT_REP) Ref() *C.WDRV_WINC_EC_POINT_REP {
+	if x == nil {
+		return nil
+	}
+	return x.ref45b763ad
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *EC_POINT_REP) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref45b763ad)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *EC_POINT_REP) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *EC_POINT_REP) Free() {
+	if x != nil && x.allocs45b763ad != nil {
+		x.allocs45b763ad.(*cgoAllocMap).Free()
+		x.ref45b763ad = nil
+	}
+}
+
+// NewEC_POINT_REPRef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewEC_POINT_REPRef(ref unsafe.Pointer) *EC_POINT_REP {
+	if ref == nil {
+		return nil
+	}
+	obj := new(EC_POINT_REP)
+	obj.ref45b763ad = (*C.WDRV_WINC_EC_POINT_REP)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *EC_POINT_REP) PassRef() (*C.WDRV_WINC_EC_POINT_REP, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref45b763ad != nil {
+		return x.ref45b763ad, nil
+	}
+	mem45b763ad := allocEC_POINT_REPMemory(1)
+	ref45b763ad := (*C.WDRV_WINC_EC_POINT_REP)(mem45b763ad)
+	allocs45b763ad := new(cgoAllocMap)
+	allocs45b763ad.Add(mem45b763ad)
+
+	var cx_allocs *cgoAllocMap
+	ref45b763ad.x, cx_allocs = *(*[32]C.uint8_t)(unsafe.Pointer(&x.X)), cgoAllocsUnknown
+	allocs45b763ad.Borrow(cx_allocs)
+
+	var cy_allocs *cgoAllocMap
+	ref45b763ad.y, cy_allocs = *(*[32]C.uint8_t)(unsafe.Pointer(&x.Y)), cgoAllocsUnknown
+	allocs45b763ad.Borrow(cy_allocs)
+
+	var csize_allocs *cgoAllocMap
+	ref45b763ad.size, csize_allocs = (C.uint16_t)(x.Size), cgoAllocsUnknown
+	allocs45b763ad.Borrow(csize_allocs)
+
+	var cprivKeyID_allocs *cgoAllocMap
+	ref45b763ad.privKeyID, cprivKeyID_allocs = (C.uint16_t)(x.PrivKeyID), cgoAllocsUnknown
+	allocs45b763ad.Borrow(cprivKeyID_allocs)
+
+	x.ref45b763ad = ref45b763ad
+	x.allocs45b763ad = allocs45b763ad
+	return ref45b763ad, allocs45b763ad
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x EC_POINT_REP) PassValue() (C.WDRV_WINC_EC_POINT_REP, *cgoAllocMap) {
+	if x.ref45b763ad != nil {
+		return *x.ref45b763ad, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *EC_POINT_REP) Deref() {
+	if x.ref45b763ad == nil {
+		return
+	}
+	x.X = *(*[32]byte)(unsafe.Pointer(&x.ref45b763ad.x))
+	x.Y = *(*[32]byte)(unsafe.Pointer(&x.ref45b763ad.y))
+	x.Size = (uint16)(x.ref45b763ad.size)
+	x.PrivKeyID = (uint16)(x.ref45b763ad.privKeyID)
+}
+
+// allocECDSA_VERIFY_REQ_INFOMemory allocates memory for type C.WDRV_WINC_ECDSA_VERIFY_REQ_INFO in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocECDSA_VERIFY_REQ_INFOMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfECDSA_VERIFY_REQ_INFOValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfECDSA_VERIFY_REQ_INFOValue = unsafe.Sizeof([1]C.WDRV_WINC_ECDSA_VERIFY_REQ_INFO{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *ECDSA_VERIFY_REQ_INFO) Ref() *C.WDRV_WINC_ECDSA_VERIFY_REQ_INFO {
+	if x == nil {
+		return nil
+	}
+	return x.ref9275a4f4
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *ECDSA_VERIFY_REQ_INFO) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref9275a4f4)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *ECDSA_VERIFY_REQ_INFO) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *ECDSA_VERIFY_REQ_INFO) Free() {
+	if x != nil && x.allocs9275a4f4 != nil {
+		x.allocs9275a4f4.(*cgoAllocMap).Free()
+		x.ref9275a4f4 = nil
+	}
+}
+
+// NewECDSA_VERIFY_REQ_INFORef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewECDSA_VERIFY_REQ_INFORef(ref unsafe.Pointer) *ECDSA_VERIFY_REQ_INFO {
+	if ref == nil {
+		return nil
+	}
+	obj := new(ECDSA_VERIFY_REQ_INFO)
+	obj.ref9275a4f4 = (*C.WDRV_WINC_ECDSA_VERIFY_REQ_INFO)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *ECDSA_VERIFY_REQ_INFO) PassRef() (*C.WDRV_WINC_ECDSA_VERIFY_REQ_INFO, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref9275a4f4 != nil {
+		return x.ref9275a4f4, nil
+	}
+	mem9275a4f4 := allocECDSA_VERIFY_REQ_INFOMemory(1)
+	ref9275a4f4 := (*C.WDRV_WINC_ECDSA_VERIFY_REQ_INFO)(mem9275a4f4)
+	allocs9275a4f4 := new(cgoAllocMap)
+	allocs9275a4f4.Add(mem9275a4f4)
+
+	var cnSig_allocs *cgoAllocMap
+	ref9275a4f4.nSig, cnSig_allocs = (C.uint32_t)(x.NSig), cgoAllocsUnknown
+	allocs9275a4f4.Borrow(cnSig_allocs)
+
+	x.ref9275a4f4 = ref9275a4f4
+	x.allocs9275a4f4 = allocs9275a4f4
+	return ref9275a4f4, allocs9275a4f4
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x ECDSA_VERIFY_REQ_INFO) PassValue() (C.WDRV_WINC_ECDSA_VERIFY_REQ_INFO, *cgoAllocMap) {
+	if x.ref9275a4f4 != nil {
+		return *x.ref9275a4f4, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *ECDSA_VERIFY_REQ_INFO) Deref() {
+	if x.ref9275a4f4 == nil {
+		return
+	}
+	x.NSig = (uint32)(x.ref9275a4f4.nSig)
+}
+
+// allocECDSA_SIGN_REQ_INFOMemory allocates memory for type C.WDRV_WINC_ECDSA_SIGN_REQ_INFO in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocECDSA_SIGN_REQ_INFOMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfECDSA_SIGN_REQ_INFOValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfECDSA_SIGN_REQ_INFOValue = unsafe.Sizeof([1]C.WDRV_WINC_ECDSA_SIGN_REQ_INFO{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *ECDSA_SIGN_REQ_INFO) Ref() *C.WDRV_WINC_ECDSA_SIGN_REQ_INFO {
+	if x == nil {
+		return nil
+	}
+	return x.ref474741b0
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *ECDSA_SIGN_REQ_INFO) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref474741b0)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *ECDSA_SIGN_REQ_INFO) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *ECDSA_SIGN_REQ_INFO) Free() {
+	if x != nil && x.allocs474741b0 != nil {
+		x.allocs474741b0.(*cgoAllocMap).Free()
+		x.ref474741b0 = nil
+	}
+}
+
+// NewECDSA_SIGN_REQ_INFORef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewECDSA_SIGN_REQ_INFORef(ref unsafe.Pointer) *ECDSA_SIGN_REQ_INFO {
+	if ref == nil {
+		return nil
+	}
+	obj := new(ECDSA_SIGN_REQ_INFO)
+	obj.ref474741b0 = (*C.WDRV_WINC_ECDSA_SIGN_REQ_INFO)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *ECDSA_SIGN_REQ_INFO) PassRef() (*C.WDRV_WINC_ECDSA_SIGN_REQ_INFO, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref474741b0 != nil {
+		return x.ref474741b0, nil
+	}
+	mem474741b0 := allocECDSA_SIGN_REQ_INFOMemory(1)
+	ref474741b0 := (*C.WDRV_WINC_ECDSA_SIGN_REQ_INFO)(mem474741b0)
+	allocs474741b0 := new(cgoAllocMap)
+	allocs474741b0.Add(mem474741b0)
+
+	var ccurveType_allocs *cgoAllocMap
+	ref474741b0.curveType, ccurveType_allocs = (C.uint16_t)(x.CurveType), cgoAllocsUnknown
+	allocs474741b0.Borrow(ccurveType_allocs)
+
+	var chashSz_allocs *cgoAllocMap
+	ref474741b0.hashSz, chashSz_allocs = (C.uint16_t)(x.HashSz), cgoAllocsUnknown
+	allocs474741b0.Borrow(chashSz_allocs)
+
+	x.ref474741b0 = ref474741b0
+	x.allocs474741b0 = allocs474741b0
+	return ref474741b0, allocs474741b0
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x ECDSA_SIGN_REQ_INFO) PassValue() (C.WDRV_WINC_ECDSA_SIGN_REQ_INFO, *cgoAllocMap) {
+	if x.ref474741b0 != nil {
+		return *x.ref474741b0, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *ECDSA_SIGN_REQ_INFO) Deref() {
+	if x.ref474741b0 == nil {
+		return
+	}
+	x.CurveType = (uint16)(x.ref474741b0.curveType)
+	x.HashSz = (uint16)(x.ref474741b0.hashSz)
+}
+
+// allocECDH_INFOMemory allocates memory for type C.WDRV_WINC_ECDH_INFO in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocECDH_INFOMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfECDH_INFOValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfECDH_INFOValue = unsafe.Sizeof([1]C.WDRV_WINC_ECDH_INFO{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *ECDH_INFO) Ref() *C.WDRV_WINC_ECDH_INFO {
+	if x == nil {
+		return nil
+	}
+	return x.refd1e512
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *ECDH_INFO) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.refd1e512)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *ECDH_INFO) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *ECDH_INFO) Free() {
+	if x != nil && x.allocsd1e512 != nil {
+		x.allocsd1e512.(*cgoAllocMap).Free()
+		x.refd1e512 = nil
+	}
+}
+
+// NewECDH_INFORef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewECDH_INFORef(ref unsafe.Pointer) *ECDH_INFO {
+	if ref == nil {
+		return nil
+	}
+	obj := new(ECDH_INFO)
+	obj.refd1e512 = (*C.WDRV_WINC_ECDH_INFO)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *ECDH_INFO) PassRef() (*C.WDRV_WINC_ECDH_INFO, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.refd1e512 != nil {
+		return x.refd1e512, nil
+	}
+	memd1e512 := allocECDH_INFOMemory(1)
+	refd1e512 := (*C.WDRV_WINC_ECDH_INFO)(memd1e512)
+	allocsd1e512 := new(cgoAllocMap)
+	allocsd1e512.Add(memd1e512)
+
+	var cpubKey_allocs *cgoAllocMap
+	refd1e512.pubKey, cpubKey_allocs = x.PubKey.PassValue()
+	allocsd1e512.Borrow(cpubKey_allocs)
+
+	var ckey_allocs *cgoAllocMap
+	refd1e512.key, ckey_allocs = *(*[32]C.uint8_t)(unsafe.Pointer(&x.Key)), cgoAllocsUnknown
+	allocsd1e512.Borrow(ckey_allocs)
+
+	x.refd1e512 = refd1e512
+	x.allocsd1e512 = allocsd1e512
+	return refd1e512, allocsd1e512
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x ECDH_INFO) PassValue() (C.WDRV_WINC_ECDH_INFO, *cgoAllocMap) {
+	if x.refd1e512 != nil {
+		return *x.refd1e512, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *ECDH_INFO) Deref() {
+	if x.refd1e512 == nil {
+		return
+	}
+	x.PubKey = *NewEC_POINT_REPRef(unsafe.Pointer(&x.refd1e512.pubKey))
+	x.Key = *(*[32]byte)(unsafe.Pointer(&x.refd1e512.key))
+}
+
+// allocECC_HANDSHAKE_INFOMemory allocates memory for type C.WDRV_WINC_ECC_HANDSHAKE_INFO in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocECC_HANDSHAKE_INFOMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfECC_HANDSHAKE_INFOValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfECC_HANDSHAKE_INFOValue = unsafe.Sizeof([1]C.WDRV_WINC_ECC_HANDSHAKE_INFO{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *ECC_HANDSHAKE_INFO) Ref() *C.WDRV_WINC_ECC_HANDSHAKE_INFO {
+	if x == nil {
+		return nil
+	}
+	return x.ref435c2a3e
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *ECC_HANDSHAKE_INFO) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.ref435c2a3e)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *ECC_HANDSHAKE_INFO) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *ECC_HANDSHAKE_INFO) Free() {
+	if x != nil && x.allocs435c2a3e != nil {
+		x.allocs435c2a3e.(*cgoAllocMap).Free()
+		x.ref435c2a3e = nil
+	}
+}
+
+// NewECC_HANDSHAKE_INFORef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewECC_HANDSHAKE_INFORef(ref unsafe.Pointer) *ECC_HANDSHAKE_INFO {
+	if ref == nil {
+		return nil
+	}
+	obj := new(ECC_HANDSHAKE_INFO)
+	obj.ref435c2a3e = (*C.WDRV_WINC_ECC_HANDSHAKE_INFO)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *ECC_HANDSHAKE_INFO) PassRef() (*C.WDRV_WINC_ECC_HANDSHAKE_INFO, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.ref435c2a3e != nil {
+		return x.ref435c2a3e, nil
+	}
+	mem435c2a3e := allocECC_HANDSHAKE_INFOMemory(1)
+	ref435c2a3e := (*C.WDRV_WINC_ECC_HANDSHAKE_INFO)(mem435c2a3e)
+	allocs435c2a3e := new(cgoAllocMap)
+	allocs435c2a3e.Add(mem435c2a3e)
+
+	var cdata_allocs *cgoAllocMap
+	ref435c2a3e.data, cdata_allocs = *(*[2]C.uint32_t)(unsafe.Pointer(&x.Data)), cgoAllocsUnknown
+	allocs435c2a3e.Borrow(cdata_allocs)
+
+	x.ref435c2a3e = ref435c2a3e
+	x.allocs435c2a3e = allocs435c2a3e
+	return ref435c2a3e, allocs435c2a3e
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x ECC_HANDSHAKE_INFO) PassValue() (C.WDRV_WINC_ECC_HANDSHAKE_INFO, *cgoAllocMap) {
+	if x.ref435c2a3e != nil {
+		return *x.ref435c2a3e, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *ECC_HANDSHAKE_INFO) Deref() {
+	if x.ref435c2a3e == nil {
+		return
+	}
+	x.Data = *(*[2]uint32)(unsafe.Pointer(&x.ref435c2a3e.data))
+}
+
+// allocCIPHER_SUITE_CONTEXTMemory allocates memory for type C.WDRV_WINC_CIPHER_SUITE_CONTEXT in C.
+// The caller is responsible for freeing the this memory via C.free.
+func allocCIPHER_SUITE_CONTEXTMemory(n int) unsafe.Pointer {
+	mem := C.calloc(C.size_t(n), (C.size_t)(sizeOfCIPHER_SUITE_CONTEXTValue))
+	if mem == nil {
+		panic("memory alloc error")
+	}
+	return mem
+}
+
+const sizeOfCIPHER_SUITE_CONTEXTValue = unsafe.Sizeof([1]C.WDRV_WINC_CIPHER_SUITE_CONTEXT{})
+
+// Ref returns the underlying reference to C object or nil if struct is nil.
+func (x *CIPHER_SUITE_CONTEXT) Ref() *C.WDRV_WINC_CIPHER_SUITE_CONTEXT {
+	if x == nil {
+		return nil
+	}
+	return x.refeaa2203b
+}
+
+// Sizeof returns the size of underlying reference to the C object in bytes.
+func (x *CIPHER_SUITE_CONTEXT) SizeOf() uintptr {
+	return unsafe.Sizeof(*x.refeaa2203b)
+}
+
+// Bytes returns a slice with its pointer set to the address of the underlying C object.
+func (x *CIPHER_SUITE_CONTEXT) Bytes() []byte {
+	ref, _ := x.PassRef()
+	return unsafe.Slice((*byte)(unsafe.Pointer(ref)), unsafe.Sizeof(*ref))
+}
+
+// Free invokes alloc map's free mechanism that cleanups any allocated memory using C free.
+// Does nothing if struct is nil or has no allocation map.
+func (x *CIPHER_SUITE_CONTEXT) Free() {
+	if x != nil && x.allocseaa2203b != nil {
+		x.allocseaa2203b.(*cgoAllocMap).Free()
+		x.refeaa2203b = nil
+	}
+}
+
+// NewCIPHER_SUITE_CONTEXTRef creates a new wrapper struct with underlying reference set to the original C object.
+// Returns nil if the provided pointer to C object is nil too.
+func NewCIPHER_SUITE_CONTEXTRef(ref unsafe.Pointer) *CIPHER_SUITE_CONTEXT {
+	if ref == nil {
+		return nil
+	}
+	obj := new(CIPHER_SUITE_CONTEXT)
+	obj.refeaa2203b = (*C.WDRV_WINC_CIPHER_SUITE_CONTEXT)(unsafe.Pointer(ref))
+	return obj
+}
+
+// PassRef returns the underlying C object, otherwise it will allocate one and set its values
+// from this wrapping struct, counting allocations into an allocation map.
+func (x *CIPHER_SUITE_CONTEXT) PassRef() (*C.WDRV_WINC_CIPHER_SUITE_CONTEXT, *cgoAllocMap) {
+	if x == nil {
+		return nil, nil
+	} else if x.refeaa2203b != nil {
+		return x.refeaa2203b, nil
+	}
+	memeaa2203b := allocCIPHER_SUITE_CONTEXTMemory(1)
+	refeaa2203b := (*C.WDRV_WINC_CIPHER_SUITE_CONTEXT)(memeaa2203b)
+	allocseaa2203b := new(cgoAllocMap)
+	allocseaa2203b.Add(memeaa2203b)
+
+	var cciperSuites_allocs *cgoAllocMap
+	refeaa2203b.ciperSuites, cciperSuites_allocs = (C.uint32_t)(x.CiperSuites), cgoAllocsUnknown
+	allocseaa2203b.Borrow(cciperSuites_allocs)
+
+	x.refeaa2203b = refeaa2203b
+	x.allocseaa2203b = allocseaa2203b
+	return refeaa2203b, allocseaa2203b
+
+}
+
+// PassValue does the same as PassRef except that it will try to dereference the returned pointer.
+func (x CIPHER_SUITE_CONTEXT) PassValue() (C.WDRV_WINC_CIPHER_SUITE_CONTEXT, *cgoAllocMap) {
+	if x.refeaa2203b != nil {
+		return *x.refeaa2203b, nil
+	}
+	ref, allocs := x.PassRef()
+	return *ref, allocs
+}
+
+// Deref uses the underlying reference to C object and fills the wrapping struct with values.
+// Do not forget to call this method whether you get a struct for C object and want to read its values.
+func (x *CIPHER_SUITE_CONTEXT) Deref() {
+	if x.refeaa2203b == nil {
+		return
+	}
+	x.CiperSuites = (uint32)(x.refeaa2203b.ciperSuites)
 }
