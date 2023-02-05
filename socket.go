@@ -312,7 +312,7 @@ func (s *Socket) Connect(addr net.Addr) (err error) {
 	}
 
 	// NOTE: Extra data is the u16AppDataOffset member of the union in the original tstrConnectReply struct
-	s.offset = strConnectReply.U16ExtraData - protocol.M2M_HIF_HDR_OFFSET
+	s.offset = strConnectReply.U16ExtraData - protocol.HifHdrOffset
 
 	// Keep the address of the remote connection
 	s.addr = addr
@@ -382,7 +382,7 @@ func (s *Socket) Secure() (err error) {
 	}
 
 	// NOTE: Extra data is the u16AppDataOffset member of the union in the original tstrConnectReply struct
-	s.offset = strConnectReply.U16ExtraData - protocol.M2M_HIF_HDR_OFFSET
+	s.offset = strConnectReply.U16ExtraData - protocol.HifHdrOffset
 
 	return
 }
@@ -714,7 +714,7 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 				sockfd:    strAcceptReply.SConnectedSock,
 				sslFlags:  w.sockets[strAcceptReply.SListenSock].sslFlags,
 				sessionId: w.getSessionId(),
-				offset:    strAcceptReply.U16AppDataOffset - protocol.M2M_HIF_HDR_OFFSET,
+				offset:    strAcceptReply.U16AppDataOffset - protocol.HifHdrOffset,
 				driver:    w,
 			}
 

@@ -25,7 +25,6 @@ SOFTWARE.
 package winc
 
 import (
-	"bytes"
 	"encoding/binary"
 	"time"
 
@@ -155,9 +154,7 @@ func (w *WINC) WifiConnectPsk(settings WifiConnectionSettings) (err error) {
 			pskValue:   0,
 		}
 
-		dataBuf := bytes.NewBuffer(make([]byte, 0, 108))
-		credentials.write(dataBuf)
-		data = dataBuf.Bytes()
+		data = credentials.bytes()
 	}
 
 	control := wifiConnectionHeader{
@@ -174,11 +171,8 @@ func (w *WINC) WifiConnectPsk(settings WifiConnectionSettings) (err error) {
 		},
 	}
 
-	controlBuf := bytes.NewBuffer(make([]byte, 0, 48))
-	control.write(controlBuf)
-
 	// Send the HIF command
-	if err = w.hif.Send(GroupWIFI, opcode, controlBuf.Bytes(), data, uint16(controlBuf.Len())); err != nil {
+	if err = w.hif.Send(GroupWIFI, opcode, control.bytes(), data, 48); err != nil {
 		return
 	}
 

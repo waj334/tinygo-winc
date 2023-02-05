@@ -25,7 +25,6 @@ SOFTWARE.
 package protocol
 
 import (
-	"github.com/waj334/tinygo-winc/debug"
 	"machine"
 	"runtime/volatile"
 	"sync"
@@ -33,7 +32,7 @@ import (
 
 	"tinygo.org/x/drivers"
 
-	"github.com/waj334/tinygo-winc/protocol/types"
+	"github.com/waj334/tinygo-winc/debug"
 )
 
 type (
@@ -42,10 +41,10 @@ type (
 )
 
 const (
-	GroupMax           = 9
-	_hifMaxPacketSize  = 1600 - 4
-	M2M_HIF_HDR_OFFSET = uint16(8)
-	HIF_HDR_OFFSET     = 8
+	GroupMax     = 9
+	HifHdrOffset = 8
+
+	hifMaxPacketSize = 1600 - 4
 )
 
 const (
@@ -236,7 +235,7 @@ func (hif *Hif) chipSleepInternal() error {
 	}
 
 	if result&_NBIT1 != 0 {
-		result &= ^_NBIT1
+		result &= ^uint32(_NBIT1)
 		if err = hif.t.WriteRegister(_WAKE_CLOCK_REG, result); err != nil {
 			return err
 		}
@@ -248,7 +247,7 @@ func (hif *Hif) chipSleepInternal() error {
 	}
 
 	if result&_NBIT0 != 0 {
-		result &= ^_NBIT0
+		result &= ^uint32(_NBIT0)
 		err = hif.t.WriteRegister(_HOST_CORT_COMM, result)
 		if err != nil {
 			return err
@@ -344,21 +343,21 @@ func (hif *Hif) Send(group GroupId, opcode OpcodeId, control, data []byte, offse
 	debug.DEBUG("HIF: Send - BEGIN")
 	defer debug.DEBUG("HIF: Send - END")
 
-	strHif := types.HifHdr{
-		U8Gid:     byte(group),
-		U8Opcode:  byte(opcode) & ^byte(types.NBIT7),
-		U16Length: HIF_HDR_OFFSET, //uint16(types.M2M_HIF_HDR_OFFSET),
+	strHif := hifHeader{
+		groupId: byte(group),
+		opcode:  byte(opcode) & ^byte(_NBIT7),
+		length:  HifHdrOffset,
 	}
 
 	if dataLen := len(data); dataLen > 0 {
 		// Add length of data and the offset
-		strHif.U16Length += offset + uint16(dataLen)
+		strHif.length += offset + uint16(dataLen)
 	} else {
 		// Add just the length of the control struct
-		strHif.U16Length += uint16(len(control))
+		strHif.length += uint16(len(control))
 	}
 
-	if strHif.U16Length < types.M2M_HIF_MAX_PACKET_SIZE {
+	if strHif.length < hifMaxPacketSize {
 		// Wake the chip before sending the HIF packet
 		if err = hif.chipWakeInternal(); err != nil {
 			return err
@@ -367,13 +366,13 @@ func (hif *Hif) Send(group GroupId, opcode OpcodeId, control, data []byte, offse
 		var reg uint32
 		reg |= uint32(group)
 		reg |= uint32(opcode) << 8
-		reg |= uint32(strHif.U16Length) << 16
+		reg |= uint32(strHif.length) << 16
 
 		if err = hif.WriteRegister(_NMI_STATE_REG, reg); err != nil {
 			return err
 		}
 
-		if err = hif.WriteRegister(_WIFI_HOST_RCV_CTRL_2, types.NBIT1); err != nil {
+		if err = hif.WriteRegister(_WIFI_HOST_RCV_CTRL_2, _NBIT1); err != nil {
 			return err
 		}
 
@@ -391,7 +390,7 @@ func (hif *Hif) Send(group GroupId, opcode OpcodeId, control, data []byte, offse
 				time.Sleep(time.Nanosecond)
 			}
 
-			if reg&types.NBIT1 == 0 {
+			if reg&_NBIT1 == 0 {
 				if dmaAddr, err = hif.ReadRegister(_WIFI_HOST_RCV_CTRL_4); err != nil {
 					return err
 				}
@@ -402,21 +401,21 @@ func (hif *Hif) Send(group GroupId, opcode OpcodeId, control, data []byte, offse
 		if dmaAddr != 0 {
 			currentAddr := dmaAddr
 			debug.DEBUG("HIF: Writing HIF header.")
-			debug.DEBUG("HIF: strHif.U8Gid: %#v", strHif.U8Gid)
-			debug.DEBUG("HIF: strHif.U8Opcode: %v", strHif.U8Opcode)
-			debug.DEBUG("HIF: strHif.U16Length: %v", strHif.U16Length)
+			debug.DEBUG("HIF: strHif.U8Gid: %#v", strHif.groupId)
+			debug.DEBUG("HIF: strHif.U8Opcode: %v", strHif.opcode)
+			debug.DEBUG("HIF: strHif.U16Length: %v", strHif.length)
 			debug.DEBUG("HIF: currentAddr: %#x", currentAddr)
 
 			// NOTE: The HIF header is transmitted in 8 bytes even though the struct itself is 4 bytes.
-			var hifHeader [HIF_HDR_OFFSET]byte
-			copy(hifHeader[:], strHif.Bytes())
+			var headerBytes [HifHdrOffset]byte
+			copy(headerBytes[:], strHif.bytes())
 
-			if err = hif.t.WriteBlock(currentAddr, hifHeader[:]); err != nil {
+			if err = hif.t.WriteBlock(currentAddr, headerBytes[:]); err != nil {
 				return err
 			}
 
 			debug.DEBUG("HIF: Done writing HIF header.")
-			currentAddr += HIF_HDR_OFFSET
+			currentAddr += HifHdrOffset
 
 			if len(control) > 0 {
 				debug.DEBUG("HIF: Writing control bytes.")
@@ -446,7 +445,7 @@ func (hif *Hif) Send(group GroupId, opcode OpcodeId, control, data []byte, offse
 			}
 
 			reg = dmaAddr << 2
-			reg |= types.NBIT1
+			reg |= _NBIT1
 			if err = hif.WriteRegister(_WIFI_HOST_RCV_CTRL_3, reg); err != nil {
 				return err
 			}
@@ -633,7 +632,7 @@ func (hif *Hif) Isr() (err error) {
 	// Has the RX interrupt been received
 	if reg&0x1 != 0 {
 		// Clear RX interrupt
-		reg &= ^_NBIT0
+		reg &= ^uint32(_NBIT0)
 		if err = hif.t.WriteRegister(_WIFI_HOST_RCV_CTRL_0, reg); err != nil {
 			return
 		}

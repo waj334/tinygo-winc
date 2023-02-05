@@ -12,10 +12,14 @@ type wifiConnectionCredentialsHeader struct {
 	// 4 Bytes
 }
 
-func (w *wifiConnectionCredentialsHeader) write(buf *bytes.Buffer) {
+func (w *wifiConnectionCredentialsHeader) bytes() []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, 4))
+
 	binary.Write(buf, binary.LittleEndian, w.credentialsSize)
 	buf.WriteByte(w.storageFlags)
 	buf.WriteByte(w.channel)
+
+	return buf.Bytes()
 }
 
 type wifiConnectionCredentialsCommon struct {
@@ -28,7 +32,9 @@ type wifiConnectionCredentialsCommon struct {
 	// 44 Bytes
 }
 
-func (w *wifiConnectionCredentialsCommon) write(buf *bytes.Buffer) {
+func (w *wifiConnectionCredentialsCommon) bytes() []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, 44))
+
 	if len(w.ssid) > 32 {
 		w.ssid = w.ssid[:32]
 	}
@@ -52,6 +58,8 @@ func (w *wifiConnectionCredentialsCommon) write(buf *bytes.Buffer) {
 	buf.WriteByte(0) // Reserved padding
 	buf.WriteByte(0) // Reserved padding
 	buf.WriteByte(0) // Reserved padding
+
+	return buf.Bytes()
 }
 
 type wifiConnectionHeader struct {
@@ -60,9 +68,12 @@ type wifiConnectionHeader struct {
 	// 48 bytes
 }
 
-func (w *wifiConnectionHeader) write(buf *bytes.Buffer) {
-	w.hdr.write(buf)
-	w.cmn.write(buf)
+func (w *wifiConnectionHeader) bytes() []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, 48))
+	buf.Write(w.hdr.bytes())
+	buf.Write(w.cmn.bytes())
+
+	return buf.Bytes()
 }
 
 type wifiPsk struct {
@@ -74,7 +85,8 @@ type wifiPsk struct {
 	// 108 bytes
 }
 
-func (w *wifiPsk) write(buf *bytes.Buffer) {
+func (w *wifiPsk) bytes() []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, 108))
 	if len(w.passphrase) > 64 {
 		w.passphrase = w.passphrase[:64]
 	}
@@ -94,6 +106,8 @@ func (w *wifiPsk) write(buf *bytes.Buffer) {
 	buf.WriteByte(w.pskValue)
 	buf.WriteByte(0) // Reserved padding
 	buf.WriteByte(0) // Reserved padding
+
+	return buf.Bytes()
 }
 
 type SystemTime struct {
