@@ -25,9 +25,9 @@ func (w *WINC) Listen(network, address string) (listener net.Listener, err error
 		}
 
 		addr = &TCPAddr{
-			U16Family: afInet,
-			U16Port:   port,
-			U32IPAddr: 0,
+			Family:    afInet,
+			Port:      port,
+			IPAddress: 0,
 		}
 	} else if network == "udp" {
 		if socket, err = w.Socket(SocketTypeDatagram, SocketConfigSslOff); err != nil {
@@ -35,9 +35,9 @@ func (w *WINC) Listen(network, address string) (listener net.Listener, err error
 		}
 
 		addr = &UDPAddr{
-			U16Family: afInet,
-			U16Port:   port,
-			U32IPAddr: 0,
+			Family:    afInet,
+			Port:      port,
+			IPAddress: 0,
 		}
 	} else {
 		return nil, &net.AddrError{

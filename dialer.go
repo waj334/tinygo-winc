@@ -2,7 +2,6 @@ package winc
 
 import (
 	"context"
-	"github.com/waj334/tinygo-winc/protocol/types"
 	"math"
 	"net"
 	"net/url"
@@ -48,9 +47,9 @@ func (w *WINC) DialContext(ctx context.Context, network, address string, tls boo
 		}
 
 		addr = &TCPAddr{
-			U16Family: afInet,
-			U16Port:   port,
-			U32IPAddr: ip,
+			Family:    afInet,
+			Port:      port,
+			IPAddress: ip,
 		}
 	} else if network == "udp" {
 		if socket, err = w.Socket(SocketTypeDatagram, config); err != nil {
@@ -58,9 +57,9 @@ func (w *WINC) DialContext(ctx context.Context, network, address string, tls boo
 		}
 
 		addr = &UDPAddr{
-			U16Family: afInet,
-			U16Port:   port,
-			U32IPAddr: ip,
+			Family:    afInet,
+			Port:      port,
+			IPAddress: ip,
 		}
 	} else {
 		return nil, &net.AddrError{
@@ -71,11 +70,11 @@ func (w *WINC) DialContext(ctx context.Context, network, address string, tls boo
 
 	if tls {
 		val := 1
-		if err = socket.Setsockopt(types.SOL_SSL_SOCKET, types.SO_SSL_ENABLE_SESSION_CACHING, unsafe.Slice((*uint8)(unsafe.Pointer(&val)), 4)); err != nil {
+		if err = socket.Setsockopt(SslSocketLevel, SslEnableSessionCaching, unsafe.Slice((*uint8)(unsafe.Pointer(&val)), 4)); err != nil {
 			panic(err)
 		}
 
-		if err = socket.Setsockopt(types.SOL_SSL_SOCKET, types.SO_SSL_BYPASS_X509_VERIF, unsafe.Slice((*uint8)(unsafe.Pointer(&val)), 4)); err != nil {
+		if err = socket.Setsockopt(SslSocketLevel, SslBypassX509Verification, unsafe.Slice((*uint8)(unsafe.Pointer(&val)), 4)); err != nil {
 			panic(err)
 		}
 	}

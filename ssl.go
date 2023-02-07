@@ -3,29 +3,117 @@ package winc
 import "C"
 import (
 	"encoding/binary"
-	"github.com/waj334/tinygo-winc/debug"
-	"github.com/waj334/tinygo-winc/protocol"
-	"github.com/waj334/tinygo-winc/protocol/types"
 	"unsafe"
+
+	"github.com/waj334/tinygo-winc/protocol"
 )
 
 type EccProvider interface {
-	DeriveClientSharedSecret(serverInfo *types.EcdhReqInfo) (clientInfo *types.EcdhReqInfo, err error)
-	DeriveServerSharedSecret(clientInfo *types.EcdhReqInfo) (serverInfo *types.EcdhReqInfo, err error)
-	GenerateKey(info *types.EcdhReqInfo) (result *types.EcdhReqInfo, err error)
-	GenerateSignature(address uint32, info *types.EcdsaSignReqInfo) (signature []byte, err error)
-	VerifySignature(address uint32, info *types.EcdsaVerifyReqInfo) (result *types.EcdsaVerifyReqInfo, err error)
+	DeriveClientSharedSecret(serverInfo *EcdhReqInfo) (clientInfo *EcdhReqInfo, err error)
+	DeriveServerSharedSecret(clientInfo *EcdhReqInfo) (serverInfo *EcdhReqInfo, err error)
+	GenerateKey(info *EcdhReqInfo) (result *EcdhReqInfo, err error)
+	GenerateSignature(address uint32, info *EcdsaSignReqInfo) (signature []byte, err error)
+	VerifySignature(address uint32, info *EcdsaVerifyReqInfo) (result *EcdsaVerifyReqInfo, err error)
 }
 
 var (
 	sslReplyChan = make(chan any, 1)
 )
 
+const (
+	sslReqCertificateVerify protocol.OpcodeId = iota
+	sslRequestEcc
+	sslResponseEcc
+	sslIndicateCertificateRevocationList
+	sslRequestWriteOwnCertificates
+	sslRequestSetCipherSuiteList
+	sslResponseSetCipherSuiteList
+	sslRespondWriteOwnCertificates
+)
+
+const (
+	eccReqNone = iota
+	eccReqClientEcdh
+	eccReqServerEcdh
+	eccReqGenKey
+	eccReqSignGen
+	eccReqSignVerify
+)
+
+type EcNamedCurve uint16
+
+const (
+	EcSecp192r1 EcNamedCurve = 19
+	EcSecp256r1 EcNamedCurve = 23
+	EcSecp384r1 EcNamedCurve = 24
+	EcSecp521r1 EcNamedCurve = 25
+	EcUnknown   EcNamedCurve = 255
+)
+
+const (
+	SslCipherRsaWithAes128CbcSha           = _NBIT0
+	SslCipherRsaWithAes128CbcSha256        = _NBIT1
+	SslCipherDheRsaWithAes128CbcSha        = _NBIT2
+	SslCipherDheRsaWithAes128CbcSha256     = _NBIT3
+	SslCipherRsaWithAes128GcmSha256        = _NBIT4
+	SslCipherDheRsaWithAes128GcmSha256     = _NBIT5
+	SslCipherRsaWithAes256CbcSha           = _NBIT6
+	SslCipherRsaWithAes256CbcSha256        = _NBIT7
+	SslCipherDheRsaWithAes256CbcSha        = _NBIT8
+	SslCipherDheRsaWithAes256CbcSha256     = _NBIT9
+	SslCipherEcdheRsaWithAes128CbcSha      = _NBIT10
+	SslCipherEcdheRsaWithAes256CbcSha      = _NBIT11
+	SslCipherEcdheRsaWithAes128CbcSha256   = _NBIT12
+	SslCipherEcdheEcdsaWithAes128CbcSha256 = _NBIT13
+	SslCipherEcdheRsaWithAes128GcmSha256   = _NBIT14
+	SslCipherEcdheEcdsaWithAes128GcmSha256 = _NBIT15
+
+	SslEccOnlyCiphers = SslCipherEcdheEcdsaWithAes128CbcSha256 |
+		SslCipherEcdheEcdsaWithAes128GcmSha256
+
+	SslEccAllCiphers = SslCipherEcdheRsaWithAes128CbcSha |
+		SslCipherEcdheRsaWithAes128CbcSha256 |
+		SslCipherEcdheRsaWithAes128GcmSha256 |
+		SslCipherEcdheEcdsaWithAes128CbcSha256 |
+		SslCipherEcdheEcdsaWithAes128GcmSha256
+
+	SslNonEccCiphersAes128 = SslCipherRsaWithAes128CbcSha |
+		SslCipherRsaWithAes128CbcSha256 |
+		SslCipherDheRsaWithAes128CbcSha |
+		SslCipherDheRsaWithAes128CbcSha256 |
+		SslCipherRsaWithAes128GcmSha256 |
+		SslCipherDheRsaWithAes128GcmSha256
+
+	SslEccCiphersAes256 = SslCipherEcdheRsaWithAes256CbcSha
+
+	SslNonEccCiphersAes256 = SslCipherRsaWithAes256CbcSha |
+		SslCipherRsaWithAes256CbcSha256 |
+		SslCipherDheRsaWithAes256CbcSha |
+		SslCipherDheRsaWithAes256CbcSha256
+
+	SslCipherAll = SslCipherRsaWithAes128CbcSha |
+		SslCipherRsaWithAes128CbcSha256 |
+		SslCipherDheRsaWithAes128CbcSha |
+		SslCipherDheRsaWithAes128CbcSha256 |
+		SslCipherRsaWithAes128GcmSha256 |
+		SslCipherDheRsaWithAes128GcmSha256 |
+		SslCipherRsaWithAes256CbcSha |
+		SslCipherRsaWithAes256CbcSha256 |
+		SslCipherDheRsaWithAes256CbcSha |
+		SslCipherDheRsaWithAes256CbcSha256 |
+		SslCipherEcdheRsaWithAes128CbcSha |
+		SslCipherEcdheRsaWithAes128CbcSha256 |
+		SslCipherEcdheRsaWithAes128GcmSha256 |
+		SslCipherEcdheEcdsaWithAes128CbcSha256 |
+		SslCipherEcdheEcdsaWithAes128GcmSha256 |
+		SslCipherEcdheRsaWithAes256CbcSha
+)
+
 func (w *WINC) handshakeResponse(strEccReqInfo []byte, data []byte) (err error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	if err = w.hif.Send(GroupSSL, protocol.OpcodeId(types.M2M_SSL_RESP_ECC)|protocol.OpcodeReqDataPkt, strEccReqInfo, data, uint16(len(strEccReqInfo))); err != nil {
+	if err = w.hif.Send(GroupSSL, sslResponseEcc|protocol.OpcodeReqDataPkt, strEccReqInfo, data, uint16(len(strEccReqInfo))); err != nil {
 		return
 	}
 
@@ -47,8 +135,8 @@ func (w *WINC) RetrieveHash(address uint32, buf []byte) (err error) {
 	return
 }
 
-func (w *WINC) RetrieveCert(address uint32) (curve types.EnumEcNamedCurve, hash, signature []byte, key *types.ECPoint, err error) {
-	key = new(types.ECPoint)
+func (w *WINC) RetrieveCert(address uint32) (curve EcNamedCurve, hash, signature []byte, key *ECPoint, err error) {
+	key = &ECPoint{}
 	var offset uint32
 	var keySz uint16
 	var hashSz uint16
@@ -58,14 +146,14 @@ func (w *WINC) RetrieveCert(address uint32) (curve types.EnumEcNamedCurve, hash,
 	if err = w.hif.Receive(address+offset, unsafe.Slice((*uint8)(unsafe.Pointer(&keySz)), 2), false); err != nil {
 		return
 	}
-	curve = types.EnumEcNamedCurve(Htons(keySz))
+	curve = EcNamedCurve(Htons(keySz))
 	offset += 2
 
 	// Receive length of individual EC point (32)
-	if err = w.hif.Receive(address+offset, unsafe.Slice((*uint8)(unsafe.Pointer(&key.U16Size)), 2), false); err != nil {
+	if err = w.hif.Receive(address+offset, unsafe.Slice((*uint8)(unsafe.Pointer(&key.Size)), 2), false); err != nil {
 		return
 	}
-	key.U16Size = Htons(key.U16Size)
+	key.Size = Htons(key.Size)
 	offset += 2
 
 	// Receive length of hash
@@ -107,11 +195,11 @@ func (w *WINC) SetActiveCipherSuite(bits uint32) (err error) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	strCsList := types.SslSetActiveCsList{
-		U32CsBMP: bits,
+	strCsList := sslSetActiveCsList{
+		CipherSuiteBitmap: bits,
 	}
 
-	if err = w.hif.Send(GroupSSL, protocol.OpcodeId(types.M2M_SSL_REQ_SET_CS_LIST), strCsList.Bytes(), nil, 0); err != nil {
+	if err = w.hif.Send(GroupSSL, sslRequestSetCipherSuiteList, strCsList.bytes(), nil, 0); err != nil {
 		return
 	}
 
@@ -124,8 +212,8 @@ func (w *WINC) sslCallback(id protocol.OpcodeId, sz uint16, address uint32) (dat
 		return
 	}
 
-	switch types.EnumM2mSslCmd(id) {
-	case types.M2M_SSL_REQ_ECC:
+	switch id {
+	case sslRequestEcc:
 		payload := make([]byte, 112)
 		if err = w.hif.Receive(address, payload, false); err != nil {
 			return
@@ -141,125 +229,105 @@ func (w *WINC) sslCallback(id protocol.OpcodeId, sz uint16, address uint32) (dat
 		var signature []byte
 
 		// Call the respective ECC method
-		switch types.EnumEccREQ(eecOp) {
-		case types.ECC_REQ_CLIENT_ECDH:
-			serverInfo := types.NewEcdhReqInfoRef(C.CBytes(payload))
+		switch eecOp {
+		case eccReqClientEcdh:
+			serverInfo := EcdhReqInfo{}
+			serverInfo.read(payload)
 
-			serverInfo.Deref()
-			serverInfo.Free()
-			serverInfo.StrPubKey.Deref()
-			serverInfo.StrPubKey.Free()
-
-			var clientInfo *types.EcdhReqInfo
-			if clientInfo, err = w.EccProvider.DeriveClientSharedSecret(serverInfo); err != nil || clientInfo == nil {
-				clientInfo = &types.EcdhReqInfo{}
-				clientInfo.U16Status = 12
+			var clientInfo *EcdhReqInfo
+			if clientInfo, err = w.EccProvider.DeriveClientSharedSecret(&serverInfo); err != nil || clientInfo == nil {
+				clientInfo = &EcdhReqInfo{}
+				clientInfo.Status = 12
+			} else {
+				clientInfo.Status = 0
 			}
 
-			clientInfo.U16REQ = serverInfo.U16REQ
-			clientInfo.U16Status = 0
-			clientInfo.U32SeqNo = serverInfo.U32SeqNo
-			clientInfo.U32UserData = serverInfo.U32UserData
+			clientInfo.REQ = serverInfo.REQ
+			clientInfo.SeqNo = serverInfo.SeqNo
+			clientInfo.UserData = serverInfo.UserData
 
-			resp = clientInfo.Bytes()
-			debug.DEBUG("length of response: %v", len(resp))
-			debug.DEBUG("response: % #x", resp)
+			resp = clientInfo.bytes()
 
-		case types.ECC_REQ_SERVER_ECDH:
-			clientInfo := types.NewEcdhReqInfoRef(C.CBytes(payload))
+		case eccReqServerEcdh:
+			clientInfo := EcdhReqInfo{}
+			clientInfo.read(payload)
 
-			clientInfo.Deref()
-			clientInfo.Free()
-			clientInfo.StrPubKey.Deref()
-			clientInfo.StrPubKey.Free()
-
-			var serverInfo *types.EcdhReqInfo
-			if serverInfo, err = w.EccProvider.DeriveServerSharedSecret(clientInfo); err != nil || serverInfo == nil {
-				serverInfo.U16Status = 12
+			var serverInfo *EcdhReqInfo
+			if serverInfo, err = w.EccProvider.DeriveServerSharedSecret(&clientInfo); err != nil || serverInfo == nil {
+				serverInfo = &EcdhReqInfo{}
+				serverInfo.Status = 12
+			} else {
+				serverInfo.Status = 0
 			}
 
-			serverInfo.U16REQ = clientInfo.U16REQ
-			serverInfo.U16Status = 0
-			serverInfo.U32SeqNo = clientInfo.U32SeqNo
-			serverInfo.U32UserData = clientInfo.U32UserData
+			serverInfo.REQ = clientInfo.REQ
+			serverInfo.SeqNo = clientInfo.SeqNo
+			serverInfo.UserData = clientInfo.UserData
 
-			resp = clientInfo.Bytes()
-			debug.DEBUG("length of response: %v", len(resp))
-			debug.DEBUG("response: % #x", resp)
+			resp = clientInfo.bytes()
 
-		case types.ECC_REQ_GEN_KEY:
-			info := types.NewEcdhReqInfoRef(C.CBytes(payload))
+		case eccReqGenKey:
+			info := EcdhReqInfo{}
+			info.read(payload)
 
-			info.Deref()
-			info.Free()
-			info.StrPubKey.Deref()
-			info.StrPubKey.Free()
-
-			var keyInfo *types.EcdhReqInfo
-			if info, err = w.EccProvider.GenerateKey(keyInfo); err != nil || info == nil {
-				keyInfo = &types.EcdhReqInfo{}
-				keyInfo.U16Status = 12
+			var keyInfo *EcdhReqInfo
+			if keyInfo, err = w.EccProvider.GenerateKey(&info); err != nil || keyInfo == nil {
+				keyInfo = &EcdhReqInfo{}
+				keyInfo.Status = 12
+			} else {
+				keyInfo.Status = 0
 			}
 
-			keyInfo.U16REQ = info.U16REQ
-			keyInfo.U16Status = 0
-			keyInfo.U32SeqNo = info.U32SeqNo
-			keyInfo.U32UserData = info.U32UserData
+			keyInfo.REQ = info.REQ
+			keyInfo.SeqNo = info.SeqNo
+			keyInfo.UserData = info.UserData
 
-			resp = keyInfo.Bytes()
-			debug.DEBUG("length of response: %v", len(resp))
-			debug.DEBUG("response: % #x", resp)
+			resp = keyInfo.bytes()
 
-		case types.ECC_REQ_SIGN_GEN:
-			info := types.NewEcdsaSignReqInfoRef(C.CBytes(payload))
+		case eccReqSignGen:
+			info := EcdsaSignReqInfo{}
+			info.read(payload)
 
-			info.Deref()
-			info.Free()
-
-			if signature, err = w.EccProvider.GenerateSignature(address, info); err != nil || info == nil {
-				info.U16Status = 12
+			if signature, err = w.EccProvider.GenerateSignature(address, &info); err != nil || signature == nil {
+				info.Status = 12
+			} else {
+				info.Status = 0
 			}
 
-			info.U16Status = 0
-			resp = info.Bytes()
-			debug.DEBUG("length of response: %v", len(resp))
-			debug.DEBUG("response: % #x", resp)
+			resp = info.bytes()
 
-		case types.ECC_REQ_SIGN_VERIFY:
-			info := types.NewEcdsaVerifyReqInfoRef(C.CBytes(payload))
+		case eccReqSignVerify:
+			info := EcdsaVerifyReqInfo{}
+			info.read(payload)
 
-			info.Deref()
-			info.Free()
-
-			var result *types.EcdsaVerifyReqInfo
-			if info, err = w.EccProvider.VerifySignature(address, info); err != nil || info == nil {
-				result = &types.EcdsaVerifyReqInfo{}
-				info.U16Status = 12
+			var result *EcdsaVerifyReqInfo
+			if result, err = w.EccProvider.VerifySignature(address, &info); err != nil || result == nil {
+				result = &EcdsaVerifyReqInfo{}
+				result.Status = 12
+			} else {
+				result.Status = 0
 			}
 
-			result.U16REQ = info.U16REQ
-			result.U16Status = 0
-			result.U32SeqNo = info.U32SeqNo
-			result.U32UserData = info.U32UserData
+			result.REQ = info.REQ
+			result.SeqNo = info.SeqNo
+			result.UserData = info.UserData
 
-			resp = result.Bytes()
-			debug.DEBUG("length of response: %v", len(resp))
-			debug.DEBUG("response: % #x", resp)
+			resp = result.bytes()
 		}
 
 		// Respond to the handshake
 		err = w.handshakeResponse(resp, signature)
-	case types.M2M_SSL_RESP_SET_CS_LIST:
-		//strCsList := &types.SslSetActiveCsList{}
-		//if err = w.hif.Receive(address, strCsList.Bytes(), false); err != nil {
+	case sslResponseSetCipherSuiteList:
+		//buf := make([]byte, 4)
+		//if err = w.hif.Receive(address, buf, false); err != nil {
 		//	return
 		//}
 		//
-		//strCsList.Deref()
-		//strCsList.Free()
+		//strCsList := sslSetActiveCsList{}
+		//strCsList.read(buf)
 		//
-		//sslReplyChan <- strCsList
-	case types.M2M_SSL_RESP_WRITE_OWN_CERTS:
+		//sslReplyChan <- &strCsList
+	case sslRespondWriteOwnCertificates:
 	}
 	return
 }

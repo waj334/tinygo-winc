@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/waj334/tinygo-winc/protocol"
-	"github.com/waj334/tinygo-winc/protocol/types"
 )
 
 type (
@@ -49,18 +48,14 @@ type (
 		mutex  sync.Mutex
 
 		bufferAddr uint32
-		bufferLen  int
 
 		// Socket reply channels
 		acceptChan  chan int8
-		bindChan    chan *types.BindReply
-		connectChan chan *types.ConnectReply
-		listenChan  chan *types.ListenReply
-		recvChan    chan *types.RecvReply
-		sendChan    chan *types.SendReply
-
-		// Misc channels
-		dnsChan chan *types.DnsReply
+		bindChan    chan *BindReply
+		connectChan chan *ConnectReply
+		listenChan  chan *ListenReply
+		recvChan    chan *RecvReply
+		sendChan    chan *SendReply
 
 		recvDeadline time.Time
 		sendDeadline time.Time
@@ -145,6 +140,14 @@ const (
 	udpTxPacketOffset = ipPacketOffset + udpIpHeaderLength
 	sslTxPacketOffset = tcpTxPacketOffset + tlsRecordHeaderLength
 
+	SocketLevel               = 1
+	SslSocketLevel            = 2
+	SslBypassX509Verification = 0x01
+	SslEnableSessionCaching   = 0x03
+	SslEnableSniValidation    = 0x04
+	SslSni                    = 0x02
+	SslAlpn                   = 0x05
+
 	sslFlagsActive       = _NBIT0
 	sslFlagsBypassX509   = _NBIT1
 	sslFlags2Reserved    = _NBIT2
@@ -183,26 +186,26 @@ func (s *Socket) Listen(backlog int) (err error) {
 
 	// Get unique session id
 
-	strListen := types.ListenCmd{
-		Sock:         s.sockfd,
-		U8BackLog:    uint8(backlog),
-		U16SessionID: s.sessionId,
+	strListen := listenCmd{
+		socket:    s.sockfd,
+		backlog:   uint8(backlog),
+		sessionID: s.sessionId,
 	}
 
 	// Send the request to the device
-	if err = s.driver.hif.Send(GroupIP, OpcodeSocketListen, strListen.Bytes(), nil, 0); err != nil {
+	if err = s.driver.hif.Send(GroupIP, OpcodeSocketListen, strListen.bytes(), nil, 0); err != nil {
 		return
 	}
 
 	// Wait for WINC to accept the incoming connection
-	var strListenReply *types.ListenReply
+	var strListenReply *ListenReply
 	select {
 	case strListenReply = <-s.listenChan:
 	}
 
-	if strListenReply.S8Status < 0 {
+	if strListenReply.Status < 0 {
 		// Return the error
-		return SocketError(strListenReply.S8Status)
+		return SocketError(strListenReply.Status)
 	}
 
 	return
@@ -216,22 +219,22 @@ func (s *Socket) Bind(addr net.Addr) (err error) {
 		return ErrSocketInvalid
 	}
 
-	strBind := types.BindCmd{
-		StrAddr: types.SockAddr{
-			U16Family: afInet,
+	strBind := bindCmd{
+		address: SocketAddress{
+			Family: afInet,
 		},
-		Sock:         s.sockfd,
-		U16SessionID: s.sessionId,
+		socket:    s.sockfd,
+		sessionID: s.sessionId,
 	}
 
 	// addr can be TCPAddr or UDPAddr
 	switch actualAddr := addr.(type) {
 	case *TCPAddr:
-		strBind.StrAddr.U32IPAddr = actualAddr.U32IPAddr
-		strBind.StrAddr.U16Port = Htons(actualAddr.U16Port)
+		strBind.address.IPAddress = actualAddr.IPAddress
+		strBind.address.Port = Htons(actualAddr.Port)
 	case *UDPAddr:
-		strBind.StrAddr.U32IPAddr = actualAddr.U32IPAddr
-		strBind.StrAddr.U16Port = Htons(actualAddr.U16Port)
+		strBind.address.IPAddress = actualAddr.IPAddress
+		strBind.address.Port = Htons(actualAddr.Port)
 	default:
 		return ErrInvalidParameter
 	}
@@ -241,18 +244,18 @@ func (s *Socket) Bind(addr net.Addr) (err error) {
 		cmd = OpcodeSocketSslBind
 	}
 
-	if err = s.driver.hif.Send(GroupIP, cmd, strBind.Bytes(), nil, 0); err != nil {
+	if err = s.driver.hif.Send(GroupIP, cmd, strBind.bytes(), nil, 0); err != nil {
 		return
 	}
 
-	var strBindReply *types.BindReply
+	var strBindReply *BindReply
 	select {
 	case strBindReply = <-s.bindChan:
 	}
 
-	if strBindReply.S8Status < 0 {
+	if strBindReply.Status < 0 {
 		// Return the error
-		return SocketError(strBindReply.S8Status)
+		return SocketError(strBindReply.Status)
 	}
 
 	s.addr = addr
@@ -268,24 +271,22 @@ func (s *Socket) Connect(addr net.Addr) (err error) {
 		return ErrSocketInvalid
 	}
 
-	strConnect := types.ConnectCmd{
-		StrAddr: types.SockAddr{
-			U16Family: afInet,
+	strConnect := connectCmd{
+		address: SocketAddress{
+			Family: afInet,
 		},
-		Sock: s.sockfd,
-
-		// Using the sessionId of the socket since the connect reply does not return this session id
-		U16SessionID: s.sessionId,
+		socket:    s.sockfd,
+		sessionID: s.sessionId,
 	}
 
 	// addr can be TCPAddr or UDPAddr
 	switch actualAddr := addr.(type) {
 	case *TCPAddr:
-		strConnect.StrAddr.U32IPAddr = actualAddr.U32IPAddr
-		strConnect.StrAddr.U16Port = Htons(actualAddr.U16Port)
+		strConnect.address.IPAddress = actualAddr.IPAddress
+		strConnect.address.Port = Htons(actualAddr.Port)
 	case *UDPAddr:
-		strConnect.StrAddr.U32IPAddr = actualAddr.U32IPAddr
-		strConnect.StrAddr.U16Port = Htons(actualAddr.U16Port)
+		strConnect.address.IPAddress = actualAddr.IPAddress
+		strConnect.address.Port = Htons(actualAddr.Port)
 	default:
 		return ErrInvalidParameter
 	}
@@ -293,26 +294,26 @@ func (s *Socket) Connect(addr net.Addr) (err error) {
 	cmd := OpcodeSocketConnect
 	if s.sslFlags&sslFlagsActive != 0 {
 		cmd = OpcodeSocketSslConnect
-		strConnect.U8SslFlags = s.sslFlags
+		strConnect.sslFlags = s.sslFlags
 	}
 
-	if err = s.driver.hif.Send(GroupIP, cmd, strConnect.Bytes(), nil, 0); err != nil {
+	if err = s.driver.hif.Send(GroupIP, cmd, strConnect.bytes(), nil, 0); err != nil {
 		return
 	}
 
-	var strConnectReply *types.ConnectReply
+	var strConnectReply *ConnectReply
 
 	// Wait for the response
 	select {
 	case strConnectReply = <-s.connectChan:
 	}
 
-	if strConnectReply.S8Error != 0 {
-		return SocketError(strConnectReply.S8Error)
+	if strConnectReply.Error != 0 {
+		return SocketError(strConnectReply.Error)
 	}
 
 	// NOTE: Extra data is the u16AppDataOffset member of the union in the original tstrConnectReply struct
-	s.offset = strConnectReply.U16ExtraData - protocol.HifHdrOffset
+	s.offset = strConnectReply.ExtraData - protocol.HifHdrOffset
 
 	// Keep the address of the remote connection
 	s.addr = addr
@@ -330,12 +331,12 @@ func (s *Socket) Shutdown() (err error) {
 		cmd = OpcodeSocketSslClose
 	}
 
-	strClose := types.CloseCmd{
-		Sock:         s.sockfd,
-		U16SessionID: s.sessionId,
+	strClose := CloseCmd{
+		socket:    s.sockfd,
+		sessionID: s.sessionId,
 	}
 
-	if err = s.driver.hif.Send(GroupIP, cmd, strClose.Bytes(), nil, 0); err != nil {
+	if err = s.driver.hif.Send(GroupIP, cmd, strClose.bytes(), nil, 0); err != nil {
 		return
 	}
 
@@ -361,28 +362,28 @@ func (s *Socket) Secure() (err error) {
 	}
 
 	s.sslFlags &= sslFlagsDelay
-	strConnect := types.ConnectCmd{
-		Sock:         s.sockfd,
-		U8SslFlags:   s.sslFlags,
-		U16SessionID: s.sessionId,
+	strConnect := connectCmd{
+		socket:    s.sockfd,
+		sslFlags:  s.sslFlags,
+		sessionID: s.sessionId,
 	}
 
-	if err = s.driver.hif.Send(GroupIP, OpcodeSocketSecure, strConnect.Bytes(), nil, 0); err != nil {
+	if err = s.driver.hif.Send(GroupIP, OpcodeSocketSecure, strConnect.bytes(), nil, 0); err != nil {
 		return
 	}
 
 	// Wait for the response
-	var strConnectReply *types.ConnectReply
+	var strConnectReply *ConnectReply
 	select {
 	case strConnectReply = <-s.connectChan:
 	}
 
-	if strConnectReply.S8Error < 0 {
-		return SocketError(strConnectReply.S8Error)
+	if strConnectReply.Error < 0 {
+		return SocketError(strConnectReply.Error)
 	}
 
 	// NOTE: Extra data is the u16AppDataOffset member of the union in the original tstrConnectReply struct
-	s.offset = strConnectReply.U16ExtraData - protocol.HifHdrOffset
+	s.offset = strConnectReply.ExtraData - protocol.HifHdrOffset
 
 	return
 }
@@ -399,11 +400,11 @@ func (s *Socket) Setsockopt(level, name int, value []byte) (err error) {
 		var sslFlag int
 		if len(value) == 4 {
 			switch name {
-			case types.SO_SSL_BYPASS_X509_VERIF:
+			case SslBypassX509Verification:
 				sslFlag = sslFlagsBypassX509
-			case types.SO_SSL_ENABLE_SESSION_CACHING:
+			case SslEnableSessionCaching:
 				sslFlag = sslFlagsCacheSession
-			case types.SO_SSL_ENABLE_SNI_VALIDATION:
+			case SslEnableSniValidation:
 				sslFlag = sslFlagsCheckSni
 			}
 		}
@@ -416,27 +417,28 @@ func (s *Socket) Setsockopt(level, name int, value []byte) (err error) {
 				s.sslFlags &= ^uint8(sslFlag)
 			}
 			return
-		} else if ((name == types.SO_SSL_SNI) && (len(value) < 64)) || ((name == types.SO_SSL_ALPN) && (len(value) <= 32)) {
-			strSslSetSockOpt := types.SSLSetSockOptCmd{
-				Sock:         s.sockfd,
-				U8Option:     uint8(name),
-				U16SessionID: s.sessionId,
+		} else if ((name == SslSni) && (len(value) < 64)) || ((name == SslAlpn) && (len(value) <= 32)) {
+			strSslSetSockOpt := sslSetSockOptCmd{
+				socket:    s.sockfd,
+				option:    uint8(name),
+				sessionID: s.sessionId,
+				optLen:    uint32(len(value)),
 			}
 
-			copy(strSslSetSockOpt.Au8OptVal[:], value)
-			control = strSslSetSockOpt.Bytes()
+			copy(strSslSetSockOpt.optVal[:], value)
+			control = strSslSetSockOpt.bytes()
 		} else {
 			return ErrSocketInvalidArg
 		}
 	} else if level == SolSocket && len(value) == 4 {
-		strSetSockOpt := types.SetSocketOptCmd{
-			U32OptionValue: protocol.ToUint32(value),
-			Sock:           s.sockfd,
-			U8Option:       uint8(name),
-			U16SessionID:   s.sessionId,
+		strSetSockOpt := setSocketOptCmd{
+			optionValue: protocol.ToUint32(value),
+			socket:      s.sockfd,
+			option:      uint8(name),
+			sessionID:   s.sessionId,
 		}
 
-		control = strSetSockOpt.Bytes()
+		control = strSetSockOpt.bytes()
 	}
 
 	if err = s.driver.hif.Send(GroupIP, cmd|protocol.OpcodeReqDataPkt, control, nil, 0); err != nil {
@@ -459,28 +461,28 @@ func (s *Socket) Send(buf []byte, deadline time.Time) (sz int, err error) {
 		cmd = OpcodeSocketSslSend
 	}
 
-	strSend := types.SendCmd{
-		Sock:         s.sockfd,
-		U16DataSize:  uint16(len(buf)),
-		U16SessionID: s.sessionId,
+	strSend := sendCmd{
+		socket:    s.sockfd,
+		dataSize:  uint16(len(buf)),
+		sessionID: s.sessionId,
 	}
 
-	if err = s.driver.hif.Send(GroupIP, cmd|protocol.OpcodeReqDataPkt, strSend.Bytes(), buf, s.offset); err != nil {
+	if err = s.driver.hif.Send(GroupIP, cmd|protocol.OpcodeReqDataPkt, strSend.bytes(), buf, s.offset); err != nil {
 		return 0, ErrSocketBufferFull
 	}
 
 	// Wait for the response
-	var strSendReply *types.SendReply
+	var strSendReply *SendReply
 	select {
 	case strSendReply = <-s.sendChan:
 	}
 
 	// Check for error
-	if strSendReply.S16SentBytes < 0 {
-		return 0, SocketError(strSendReply.S16SentBytes)
+	if strSendReply.SentBytes < 0 {
+		return 0, SocketError(strSendReply.SentBytes)
 	}
 
-	sz = int(strSendReply.S16SentBytes)
+	sz = int(strSendReply.SentBytes)
 	return
 }
 
@@ -489,43 +491,43 @@ func (s *Socket) SendTo(buf []byte, addr net.Addr, deadline time.Time) (sz int, 
 		return 0, ErrSocketInvalid
 	}
 
-	strSend := types.SendCmd{
-		Sock:        s.sockfd,
-		U16DataSize: uint16(len(buf)),
-		StrAddr: types.SockAddr{
-			U16Family: afInet,
+	strSend := sendCmd{
+		socket:   s.sockfd,
+		dataSize: uint16(len(buf)),
+		address: SocketAddress{
+			Family: afInet,
 		},
-		U16SessionID: s.sessionId,
+		sessionID: s.sessionId,
 	}
 
 	// addr can be TCPAddr or UDPAddr
 	switch actualAddr := addr.(type) {
 	case *TCPAddr:
-		strSend.StrAddr.U32IPAddr = actualAddr.U32IPAddr
-		strSend.StrAddr.U16Port = Htons(actualAddr.U16Port)
+		strSend.address.IPAddress = actualAddr.IPAddress
+		strSend.address.Port = Htons(actualAddr.Port)
 	case *UDPAddr:
-		strSend.StrAddr.U32IPAddr = actualAddr.U32IPAddr
-		strSend.StrAddr.U16Port = Htons(actualAddr.U16Port)
+		strSend.address.IPAddress = actualAddr.IPAddress
+		strSend.address.Port = Htons(actualAddr.Port)
 	default:
 		return 0, ErrInvalidParameter
 	}
 
-	if err = s.driver.hif.Send(GroupIP, OpcodeSocketSendTo|protocol.OpcodeReqDataPkt, strSend.Bytes(), buf, udpTxPacketOffset); err != nil {
+	if err = s.driver.hif.Send(GroupIP, OpcodeSocketSendTo|protocol.OpcodeReqDataPkt, strSend.bytes(), buf, udpTxPacketOffset); err != nil {
 		return 0, ErrSocketBufferFull
 	}
 
 	// Wait for the response
-	var strSendReply *types.SendReply
+	var strSendReply *SendReply
 	select {
 	case strSendReply = <-s.sendChan:
 	}
 
 	// Check for error
-	if strSendReply.S16SentBytes < 0 {
-		return 0, SocketError(strSendReply.S16SentBytes)
+	if strSendReply.SentBytes < 0 {
+		return 0, SocketError(strSendReply.SentBytes)
 	}
 
-	sz = int(strSendReply.S16SentBytes)
+	sz = int(strSendReply.SentBytes)
 	return
 }
 
@@ -554,27 +556,27 @@ func (s *Socket) Recv(buf []byte, deadline time.Time) (sz int, err error) {
 		timeout = 0xFFFFFFFF
 	}
 
-	strRecv := types.RecvCmd{
-		U32Timeoutmsec: uint32(timeout),
-		Sock:           s.sockfd,
-		U16BufLen:      uint16(len(buf)),
-		U16SessionID:   s.driver.getSessionId(),
+	strRecv := recvCmd{
+		timeout:   uint32(timeout),
+		socket:    s.sockfd,
+		bufLen:    uint16(len(buf)),
+		sessionID: s.driver.getSessionId(),
 	}
 
-	if err = s.driver.hif.Send(GroupIP, cmd, strRecv.Bytes(), nil, 0); err != nil {
+	if err = s.driver.hif.Send(GroupIP, cmd, strRecv.bytes(), nil, 0); err != nil {
 		return 0, ErrSocketBufferFull
 	}
 
 	// Wait for the reply
-	var strRecvReply *types.RecvReply
+	var strRecvReply *RecvReply
 	select {
 	case strRecvReply = <-s.recvChan:
-		sz = int(strRecvReply.S16RecvStatus)
+		sz = int(strRecvReply.RecvStatus)
 	}
 
-	if strRecvReply.S16RecvStatus < 0 {
+	if strRecvReply.RecvStatus < 0 {
 		// Return the amount of data actually read and the error
-		return sz, SocketError(strRecvReply.S16RecvStatus)
+		return sz, SocketError(strRecvReply.RecvStatus)
 	}
 
 	// Receive the payload
@@ -619,20 +621,20 @@ func (w *WINC) Socket(sockType SocketType, config SocketConfig) (socket *Socket,
 			driver: w,
 
 			acceptChan:  make(chan int8, 1),
-			bindChan:    make(chan *types.BindReply, 1),
-			connectChan: make(chan *types.ConnectReply, 1),
-			listenChan:  make(chan *types.ListenReply, 1),
-			recvChan:    make(chan *types.RecvReply, 1),
-			sendChan:    make(chan *types.SendReply, 1),
+			bindChan:    make(chan *BindReply, 1),
+			connectChan: make(chan *ConnectReply, 1),
+			listenChan:  make(chan *ListenReply, 1),
+			recvChan:    make(chan *RecvReply, 1),
+			sendChan:    make(chan *SendReply, 1),
 		}
 
 		if sockType == SocketTypeStream && config != SocketConfigSslOff {
 			// Create TLS enabled socket
-			strSSLCreate := types.SSLSocketCreateCmd{
-				SslSock: int8(sockfd),
+			strSSLCreate := sslSocketCreateCmd{
+				socket: int8(sockfd),
 			}
 
-			if err = w.hif.Send(GroupWIFI, OpcodeSocketSslCreate, strSSLCreate.Bytes(), nil, 0); err != nil {
+			if err = w.hif.Send(GroupWIFI, OpcodeSocketSslCreate, strSSLCreate.bytes(), nil, 0); err != nil {
 				return nil, err
 			}
 
@@ -679,8 +681,8 @@ func (w *WINC) GetHostByName(hostname string) (address uint32, err error) {
 
 		select {
 		case reply := <-w.callbackChan:
-			strDnsReply := reply.(*types.DnsReply)
-			address = strDnsReply.U32HostIP
+			strDnsReply := reply.(*dnsReply)
+			address = strDnsReply.hostIP
 		}
 	}
 
@@ -700,104 +702,104 @@ func (w *WINC) getSessionId() (id uint16) {
 func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (data any, err error) {
 	switch id {
 	case OpcodeSocketAccept:
-		strAcceptReply := &types.AcceptReply{}
-		if err = w.hif.Receive(address, strAcceptReply.Bytes(), false); err != nil {
+		buf := make([]byte, 12)
+		if err = w.hif.Receive(address, buf, false); err != nil {
 			return
 		}
 
-		strAcceptReply.Deref()
-		strAcceptReply.Free()
+		strAcceptReply := AcceptReply{}
+		strAcceptReply.read(buf)
 
-		if strAcceptReply.SConnectedSock > 0 {
+		if strAcceptReply.ConnectedSock > 0 {
 			// Create a socket struct for the connected socket
-			w.sockets[strAcceptReply.SConnectedSock] = &Socket{
-				sockfd:    strAcceptReply.SConnectedSock,
-				sslFlags:  w.sockets[strAcceptReply.SListenSock].sslFlags,
+			w.sockets[strAcceptReply.ConnectedSock] = &Socket{
+				sockfd:    strAcceptReply.ConnectedSock,
+				sslFlags:  w.sockets[strAcceptReply.ListenSock].sslFlags,
 				sessionId: w.getSessionId(),
-				offset:    strAcceptReply.U16AppDataOffset - protocol.HifHdrOffset,
+				offset:    strAcceptReply.AppDataOffset - protocol.HifHdrOffset,
 				driver:    w,
 			}
 
-			switch w.sockets[strAcceptReply.SListenSock].addr.(type) {
+			switch w.sockets[strAcceptReply.ListenSock].addr.(type) {
 			case *TCPAddr:
-				w.sockets[strAcceptReply.SConnectedSock].addr = &TCPAddr{
-					U16Family: afInet,
-					U16Port:   strAcceptReply.StrAddr.U16Port,
-					U32IPAddr: strAcceptReply.StrAddr.U32IPAddr,
+				w.sockets[strAcceptReply.ConnectedSock].addr = &TCPAddr{
+					Family:    afInet,
+					Port:      strAcceptReply.Address.Port,
+					IPAddress: strAcceptReply.Address.IPAddress,
 				}
 			case *UDPAddr:
-				w.sockets[strAcceptReply.SConnectedSock].addr = &UDPAddr{
-					U16Family: afInet,
-					U16Port:   strAcceptReply.StrAddr.U16Port,
-					U32IPAddr: strAcceptReply.StrAddr.U32IPAddr,
+				w.sockets[strAcceptReply.ConnectedSock].addr = &UDPAddr{
+					Family:    afInet,
+					Port:      strAcceptReply.Address.Port,
+					IPAddress: strAcceptReply.Address.IPAddress,
 				}
 			}
 
 			// Signal that a socket is ready
-			w.sockets[strAcceptReply.SListenSock].acceptChan <- strAcceptReply.SConnectedSock
+			w.sockets[strAcceptReply.ListenSock].acceptChan <- strAcceptReply.ConnectedSock
 		} else {
-			w.sockets[strAcceptReply.SListenSock].acceptChan <- -1
+			w.sockets[strAcceptReply.ListenSock].acceptChan <- -1
 		}
 
 		data = strAcceptReply
 	case OpcodeSocketBind, OpcodeSocketSslBind:
-		strBindReply := &types.BindReply{}
-		if err = w.hif.Receive(address, strBindReply.Bytes(), false); err != nil {
+		buf := make([]byte, 4)
+		if err = w.hif.Receive(address, buf, false); err != nil {
 			return
 		}
 
-		strBindReply.Deref()
-		strBindReply.Free()
+		strBindReply := BindReply{}
+		strBindReply.read(buf)
 
-		if w.sockets[strBindReply.Sock] != nil {
-			w.sockets[strBindReply.Sock].bindChan <- strBindReply
+		if w.sockets[strBindReply.Socket] != nil {
+			w.sockets[strBindReply.Socket].bindChan <- &strBindReply
 		}
 
 		data = strBindReply
 	case OpcodeSocketConnect, OpcodeSocketSslConnect:
-		strConnectReply := &types.ConnectReply{}
-		if err = w.hif.Receive(address, strConnectReply.Bytes(), false); err != nil {
+		buf := make([]byte, 4)
+		if err = w.hif.Receive(address, buf, false); err != nil {
 			return
 		}
 
-		strConnectReply.Deref()
-		strConnectReply.Free()
+		strConnectReply := ConnectReply{}
+		strConnectReply.read(buf)
 
-		if w.sockets[strConnectReply.Sock] != nil {
-			w.sockets[strConnectReply.Sock].connectChan <- strConnectReply
+		if w.sockets[strConnectReply.Socket] != nil {
+			w.sockets[strConnectReply.Socket].connectChan <- &strConnectReply
 		}
 
 		data = strConnectReply
 	case OpcodeSocketListen:
-		strListenReply := &types.ListenReply{}
-		if err = w.hif.Receive(address, strListenReply.Bytes(), false); err != nil {
+		buf := make([]byte, 4)
+		if err = w.hif.Receive(address, buf, false); err != nil {
 			return
 		}
 
-		strListenReply.Deref()
-		strListenReply.Free()
+		strListenReply := ListenReply{}
+		strListenReply.read(buf)
 
-		if w.sockets[strListenReply.Sock] != nil {
-			w.sockets[strListenReply.Sock].listenChan <- strListenReply
+		if w.sockets[strListenReply.Socket] != nil {
+			w.sockets[strListenReply.Socket].listenChan <- &strListenReply
 		}
 
 		data = strListenReply
 	case OpcodeSocketRecv, OpcodeSocketSslRecv, OpcodeSocketRecvFrom:
-		strRecvReply := &types.RecvReply{}
-		if err = w.hif.Receive(address, strRecvReply.Bytes(), false); err != nil {
+		buf := make([]byte, 16)
+		if err = w.hif.Receive(address, buf, false); err != nil {
 			return
 		}
 
-		strRecvReply.Deref()
-		strRecvReply.Free()
-		if strRecvReply.Sock >= 0 && strRecvReply.Sock < maxSocket {
-			if w.sockets[strRecvReply.Sock] != nil {
-				if strRecvReply.S16RecvStatus > 0 && strRecvReply.S16RecvStatus < int16(sz) {
+		strRecvReply := RecvReply{}
+		strRecvReply.read(buf)
+		if strRecvReply.Socket >= 0 && strRecvReply.Socket < maxSocket {
+			if w.sockets[strRecvReply.Socket] != nil {
+				if strRecvReply.RecvStatus > 0 && strRecvReply.RecvStatus < int16(sz) {
 					// Cache data location for Recv can retrieve the data from the WINC firmware directly
-					w.sockets[strRecvReply.Sock].bufferAddr = address + uint32(strRecvReply.U16DataOffset)
+					w.sockets[strRecvReply.Socket].bufferAddr = address + uint32(strRecvReply.DataOffset)
 				}
 
-				w.sockets[strRecvReply.Sock].recvChan <- strRecvReply
+				w.sockets[strRecvReply.Socket].recvChan <- &strRecvReply
 			}
 
 			data = strRecvReply
@@ -805,29 +807,29 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 			return nil, ErrSocketDoesNotExist
 		}
 	case OpcodeSocketSend, OpcodeSocketSslSend, OpcodeSocketSendTo:
-		strSendReply := &types.SendReply{}
-		if err = w.hif.Receive(address, strSendReply.Bytes(), false); err != nil {
+		buf := make([]byte, 8)
+		if err = w.hif.Receive(address, buf, false); err != nil {
 			return
 		}
 
-		strSendReply.Deref()
-		strSendReply.Free()
+		strSendReply := SendReply{}
+		strSendReply.read(buf)
 
-		if w.sockets[strSendReply.Sock] != nil {
-			w.sockets[strSendReply.Sock].sendChan <- strSendReply
+		if w.sockets[strSendReply.Socket] != nil {
+			w.sockets[strSendReply.Socket].sendChan <- &strSendReply
 		}
 
 		data = strSendReply
 	case OpcodeSocketDnsResolve:
-		strDnsReply := &types.DnsReply{}
-		if err = w.hif.Receive(address, strDnsReply.Bytes(), false); err != nil {
+		buf := make([]byte, 68)
+		if err = w.hif.Receive(address, buf, false); err != nil {
 			return
 		}
 
-		strDnsReply.Deref()
-		strDnsReply.Free()
+		strDnsReply := dnsReply{}
+		strDnsReply.read(buf)
 
-		w.callbackChan <- strDnsReply
+		w.callbackChan <- &strDnsReply
 		data = strDnsReply
 	}
 

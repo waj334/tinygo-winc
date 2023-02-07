@@ -25,15 +25,15 @@ SOFTWARE.
 package winc
 
 import (
-	"github.com/waj334/tinygo-winc/debug"
 	"net"
 	"sync"
 	"time"
 
 	"machine"
-
-	"github.com/waj334/tinygo-winc/protocol"
 	"tinygo.org/x/drivers"
+
+	"github.com/waj334/tinygo-winc/debug"
+	"github.com/waj334/tinygo-winc/protocol"
 )
 
 type WINC struct {

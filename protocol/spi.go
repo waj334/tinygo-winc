@@ -25,13 +25,13 @@ SOFTWARE.
 package protocol
 
 import (
-	"github.com/waj334/tinygo-winc/debug"
 	"sync"
 	"time"
 
 	"machine"
-
 	"tinygo.org/x/drivers"
+
+	"github.com/waj334/tinygo-winc/debug"
 )
 
 type transport struct {
