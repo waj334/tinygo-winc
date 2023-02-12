@@ -3,6 +3,7 @@ package winc
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/waj334/tinygo-winc/utilities"
 )
 
 type wifiConnectionCredentialsHeader struct {
@@ -46,12 +47,12 @@ func (w *wifiConnectionCredentialsCommon) bytes() []byte {
 	buf.WriteByte(byte(len(w.ssid)))
 
 	buf.Write(w.ssid)
-	pad(len(w.ssid), 32, buf)
+	utilities.Pad(len(w.ssid), 32, buf)
 
 	buf.WriteByte(w.options)
 
 	buf.Write(w.bssid)
-	pad(len(w.bssid), 6, buf)
+	utilities.Pad(len(w.bssid), 6, buf)
 
 	buf.WriteByte(w.authType)
 
@@ -98,10 +99,10 @@ func (w *wifiPsk) bytes() []byte {
 	buf.WriteByte(byte(len(w.passphrase)))
 
 	buf.Write(w.passphrase)
-	pad(len(w.passphrase), 64, buf)
+	utilities.Pad(len(w.passphrase), 64, buf)
 
 	buf.Write(w.psk)
-	pad(len(w.psk), 40, buf)
+	utilities.Pad(len(w.psk), 40, buf)
 
 	buf.WriteByte(w.pskValue)
 	buf.WriteByte(0) // Reserved padding
@@ -190,4 +191,85 @@ func (w *WifiConnectionInfo) read(data []byte) {
 
 	channel, _ := reader.ReadByte()
 	w.CurrentChannel = WifiChannel(channel)
+}
+
+type APConfig struct {
+	SSID         string //33 bytes
+	Channel      WifiChannel
+	SecurityType WifiSecurityType
+	SSIDHidden   bool
+	DHCP         [4]byte
+	WPAKey       string //65 bytes
+	/* padding [2] */
+}
+
+func (a *APConfig) bytes() []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, 136))
+
+	// Truncate string values
+	ssid := []byte(a.SSID)
+	ssidLen := len(a.SSID)
+	if ssidLen > 32 {
+		ssid = []byte(a.SSID[:32])
+		ssidLen = 32
+	}
+
+	wpaKey := []byte(a.WPAKey)
+	wpaKeyLen := len(a.WPAKey)
+	if wpaKeyLen > 64 {
+		wpaKey = []byte(a.WPAKey[:64])
+		wpaKeyLen = 64
+	}
+
+	// Write to the buffer
+	buf.Write(ssid)
+	utilities.Pad(ssidLen, 33, buf)
+
+	buf.WriteByte(byte(a.Channel))
+	buf.WriteByte(0) // Unused WEP setting
+	buf.WriteByte(byte(wpaKeyLen))
+	utilities.Pad(0, 27, buf) // Unused WEP setting
+	buf.WriteByte(byte(a.SecurityType))
+
+	if a.SSIDHidden {
+		buf.WriteByte(1)
+	} else {
+		buf.WriteByte(0)
+	}
+
+	buf.Write(a.DHCP[:])
+
+	buf.Write(wpaKey)
+	utilities.Pad(wpaKeyLen, 65, buf)
+
+	buf.WriteByte(0)
+	buf.WriteByte(0)
+
+	return buf.Bytes()
+}
+
+type APConfigExt struct {
+	DefaultGateway [4]byte
+	DNS            [4]byte
+	SubnetMask     [4]byte
+}
+
+func (a *APConfigExt) bytes() []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, 12))
+	buf.Write(a.DefaultGateway[:])
+	buf.Write(a.DNS[:])
+	buf.Write(a.SubnetMask[:])
+	return buf.Bytes()
+}
+
+type APModeConfig struct {
+	APConfig
+	APConfigExt
+}
+
+func (a *APModeConfig) bytes() []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, 148))
+	buf.Write(a.APConfig.bytes())
+	buf.Write(a.APConfigExt.bytes())
+	return buf.Bytes()
 }

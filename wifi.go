@@ -65,6 +65,11 @@ const (
 	OpcodeWifiReqDhcpFailure
 )
 
+const (
+	OpcodeWifiReqEnableAP protocol.OpcodeId = iota + 70
+	OpcodeWifiReqDisableAP
+)
+
 type WifiCredOption uint8
 
 const (
@@ -76,7 +81,7 @@ const (
 type WifiChannel uint8
 
 const (
-	WifiChannel1 WifiChannel = iota
+	WifiChannel1 WifiChannel = iota + 1
 	WifiChannel2
 	WifiChannel3
 	WifiChannel4
@@ -205,6 +210,33 @@ func (w *WINC) GetConnectionInfo() (strConnInfo *WifiConnectionInfo, err error) 
 	select {
 	case reply := <-w.callbackChan:
 		strConnInfo = reply.(*WifiConnectionInfo)
+	}
+
+	return
+}
+
+func (w *WINC) EnableAP(config APModeConfig) (err error) {
+	// Validate configuration
+	if config.SecurityType == WifiSecurityWep {
+		return ErrInvalidParameter
+	} else if config.SecurityType == WifiSecurityWpaPsk && len(config.WPAKey) == 0 {
+		return ErrInvalidParameter
+	} else if config.Channel < WifiChannel1 || config.Channel > WifiChannel14 {
+		return ErrInvalidParameter
+	} // TODO check IP
+
+	if err = w.hif.Send(GroupWIFI, OpcodeWifiReqEnableAP|protocol.OpcodeReqDataPkt,
+		nil, config.bytes(), 0); err != nil {
+
+		return
+	}
+
+	return
+}
+
+func (w *WINC) DisableAP() (err error) {
+	if err = w.hif.Send(GroupWIFI, OpcodeWifiReqDisableAP, nil, nil, 0); err != nil {
+		return
 	}
 
 	return
