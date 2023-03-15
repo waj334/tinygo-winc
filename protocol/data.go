@@ -151,11 +151,11 @@ func (data dataPacket) response(t *transport) (err error) {
 		rspLen = 2
 	}
 
-	t.cs.Low()
+	t.chipSelect(false)
 	response[0], _ = t.Transfer(0)
 	response[1], _ = t.Transfer(0)
 	response[2], _ = t.Transfer(0)
-	t.cs.High()
+	t.chipSelect(true)
 
 	debug.DEBUG("PROTOCOL: Data response packet %v", response)
 

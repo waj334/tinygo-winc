@@ -16,7 +16,7 @@ func (w *WINC) Listen(network, address string) (listener net.Listener, err error
 	}
 
 	// Parse the port number string
-	port := uint16(Atoi(uri.Port()))
+	port := Atoi(uri.Port())
 
 	// Create the respective socket type
 	if network == "tcp" {
@@ -24,20 +24,18 @@ func (w *WINC) Listen(network, address string) (listener net.Listener, err error
 			return nil, err
 		}
 
-		addr = &TCPAddr{
-			Family:    afInet,
-			Port:      port,
-			IPAddress: 0,
+		addr = &net.TCPAddr{
+			IP:   []byte{0, 0, 0, 0},
+			Port: port,
 		}
 	} else if network == "udp" {
 		if socket, err = w.Socket(SocketTypeDatagram, SocketConfigSslOff); err != nil {
 			return nil, err
 		}
 
-		addr = &UDPAddr{
-			Family:    afInet,
-			Port:      port,
-			IPAddress: 0,
+		addr = &net.UDPAddr{
+			IP:   []byte{0, 0, 0, 0},
+			Port: port,
 		}
 	} else {
 		return nil, &net.AddrError{

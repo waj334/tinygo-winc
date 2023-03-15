@@ -32,11 +32,12 @@ import (
 	"tinygo.org/x/drivers"
 
 	"github.com/waj334/tinygo-winc/debug"
+	"github.com/waj334/tinygo-winc/hal"
 )
 
 type transport struct {
 	spi      drivers.SPI
-	cs       machine.Pin
+	cs       hal.Pin
 	busMutex sync.Mutex
 	spiMutex sync.Mutex
 
@@ -406,7 +407,7 @@ func (t *transport) internalReset() (err error) {
 }
 
 func (t *transport) chipSelect(enable bool) {
-	if t.cs != machine.NoPin && t.cs != 0 {
+	if t.cs != machine.NoPin && t.cs != nil {
 		if enable {
 			t.cs.High()
 		} else {

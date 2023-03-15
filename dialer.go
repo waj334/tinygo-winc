@@ -2,9 +2,11 @@ package winc
 
 import (
 	"context"
+	"encoding/binary"
 	"math"
 	"net"
 	"net/url"
+	"strconv"
 	"unsafe"
 )
 
@@ -28,7 +30,7 @@ func (w *WINC) DialContext(ctx context.Context, network, address string, tls boo
 	}
 
 	// Parse the port number string
-	port := uint16(Atoi(uri.Port()))
+	port, _ := strconv.Atoi(uri.Port())
 
 	// Perform DNS lookup
 	if ip, err = w.GetHostByName(uri.Hostname()); err != nil {
@@ -46,20 +48,18 @@ func (w *WINC) DialContext(ctx context.Context, network, address string, tls boo
 			return nil, err
 		}
 
-		addr = &TCPAddr{
-			Family:    afInet,
-			Port:      port,
-			IPAddress: ip,
+		addr = &net.TCPAddr{
+			IP:   binary.LittleEndian.AppendUint32(make([]byte, 0, 4), ip),
+			Port: port,
 		}
 	} else if network == "udp" {
 		if socket, err = w.Socket(SocketTypeDatagram, config); err != nil {
 			return nil, err
 		}
 
-		addr = &UDPAddr{
-			Family:    afInet,
-			Port:      port,
-			IPAddress: ip,
+		addr = &net.UDPAddr{
+			IP:   binary.LittleEndian.AppendUint32(make([]byte, 0, 4), ip),
+			Port: port,
 		}
 	} else {
 		return nil, &net.AddrError{

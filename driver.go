@@ -29,19 +29,19 @@ import (
 	"sync"
 	"time"
 
-	"machine"
 	"tinygo.org/x/drivers"
 
 	"github.com/waj334/tinygo-winc/debug"
+	"github.com/waj334/tinygo-winc/hal"
 	"github.com/waj334/tinygo-winc/protocol"
 )
 
 type WINC struct {
 	SPI       drivers.SPI
-	CS        machine.Pin
-	IRQ       machine.Pin
-	EnablePin machine.Pin
-	ResetPin  machine.Pin
+	CS        hal.Pin
+	IRQ       hal.InterruptPin
+	EnablePin hal.Pin
+	ResetPin  hal.Pin
 
 	EccProvider EccProvider
 
@@ -173,9 +173,9 @@ func (w *WINC) GetGPIOState(gpio GPIOType) (GPIOState, error) {
 
 func (w *WINC) setInterruptEnabled(on bool) {
 	if on {
-		w.IRQ.SetInterrupt(machine.PinFalling, w.irqHandler)
+		w.IRQ.Enable(w.irqHandler)
 	} else {
-		w.IRQ.SetInterrupt(machine.PinFalling, nil)
+		w.IRQ.Disable()
 	}
 }
 
@@ -212,7 +212,7 @@ func (w *WINC) isr(signal <-chan bool) {
 	}
 }
 
-func (w *WINC) irqHandler(machine.Pin) {
+func (w *WINC) irqHandler(pin hal.Pin) {
 	select {
 	case w.isrSignal <- true:
 	// Unblock the interrupt service (go)routine

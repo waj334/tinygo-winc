@@ -25,6 +25,7 @@ SOFTWARE.
 package winc
 
 import (
+	"encoding/binary"
 	"net"
 	"sync"
 	"time"
@@ -229,12 +230,12 @@ func (s *Socket) Bind(addr net.Addr) (err error) {
 
 	// addr can be TCPAddr or UDPAddr
 	switch actualAddr := addr.(type) {
-	case *TCPAddr:
-		strBind.address.IPAddress = actualAddr.IPAddress
-		strBind.address.Port = Htons(actualAddr.Port)
-	case *UDPAddr:
-		strBind.address.IPAddress = actualAddr.IPAddress
-		strBind.address.Port = Htons(actualAddr.Port)
+	case *net.TCPAddr:
+		strBind.address.IPAddress = binary.LittleEndian.Uint32(actualAddr.IP)
+		strBind.address.Port = Htons(uint16(actualAddr.Port))
+	case *net.UDPAddr:
+		strBind.address.IPAddress = binary.LittleEndian.Uint32(actualAddr.IP)
+		strBind.address.Port = Htons(uint16(actualAddr.Port))
 	default:
 		return ErrInvalidParameter
 	}
@@ -281,12 +282,12 @@ func (s *Socket) Connect(addr net.Addr) (err error) {
 
 	// addr can be TCPAddr or UDPAddr
 	switch actualAddr := addr.(type) {
-	case *TCPAddr:
-		strConnect.address.IPAddress = actualAddr.IPAddress
-		strConnect.address.Port = Htons(actualAddr.Port)
-	case *UDPAddr:
-		strConnect.address.IPAddress = actualAddr.IPAddress
-		strConnect.address.Port = Htons(actualAddr.Port)
+	case *net.TCPAddr:
+		strConnect.address.IPAddress = binary.LittleEndian.Uint32(actualAddr.IP)
+		strConnect.address.Port = Htons(uint16(actualAddr.Port))
+	case *net.UDPAddr:
+		strConnect.address.IPAddress = binary.LittleEndian.Uint32(actualAddr.IP)
+		strConnect.address.Port = Htons(uint16(actualAddr.Port))
 	default:
 		return ErrInvalidParameter
 	}
@@ -502,12 +503,12 @@ func (s *Socket) SendTo(buf []byte, addr net.Addr, deadline time.Time) (sz int, 
 
 	// addr can be TCPAddr or UDPAddr
 	switch actualAddr := addr.(type) {
-	case *TCPAddr:
-		strSend.address.IPAddress = actualAddr.IPAddress
-		strSend.address.Port = Htons(actualAddr.Port)
-	case *UDPAddr:
-		strSend.address.IPAddress = actualAddr.IPAddress
-		strSend.address.Port = Htons(actualAddr.Port)
+	case *net.TCPAddr:
+		strSend.address.IPAddress = binary.LittleEndian.Uint32(actualAddr.IP)
+		strSend.address.Port = Htons(uint16(actualAddr.Port))
+	case *net.UDPAddr:
+		strSend.address.IPAddress = binary.LittleEndian.Uint32(actualAddr.IP)
+		strSend.address.Port = Htons(uint16(actualAddr.Port))
 	default:
 		return 0, ErrInvalidParameter
 	}
@@ -720,18 +721,17 @@ func (w *WINC) socketCallback(id protocol.OpcodeId, sz uint16, address uint32) (
 				driver:    w,
 			}
 
+			ip := make([]byte, 0, 4)
 			switch w.sockets[strAcceptReply.ListenSock].addr.(type) {
-			case *TCPAddr:
-				w.sockets[strAcceptReply.ConnectedSock].addr = &TCPAddr{
-					Family:    afInet,
-					Port:      strAcceptReply.Address.Port,
-					IPAddress: strAcceptReply.Address.IPAddress,
+			case *net.TCPAddr:
+				w.sockets[strAcceptReply.ConnectedSock].addr = &net.TCPAddr{
+					IP:   binary.LittleEndian.AppendUint32(ip, strAcceptReply.Address.IPAddress),
+					Port: int(strAcceptReply.Address.Port),
 				}
-			case *UDPAddr:
-				w.sockets[strAcceptReply.ConnectedSock].addr = &UDPAddr{
-					Family:    afInet,
-					Port:      strAcceptReply.Address.Port,
-					IPAddress: strAcceptReply.Address.IPAddress,
+			case *net.UDPAddr:
+				w.sockets[strAcceptReply.ConnectedSock].addr = &net.UDPAddr{
+					IP:   binary.LittleEndian.AppendUint32(ip, strAcceptReply.Address.IPAddress),
+					Port: int(strAcceptReply.Address.Port),
 				}
 			}
 

@@ -25,7 +25,6 @@ SOFTWARE.
 package protocol
 
 import (
-	"machine"
 	"runtime/volatile"
 	"sync"
 	"time"
@@ -33,6 +32,7 @@ import (
 	"tinygo.org/x/drivers"
 
 	"github.com/waj334/tinygo-winc/debug"
+	"github.com/waj334/tinygo-winc/hal"
 )
 
 type (
@@ -74,7 +74,7 @@ type Hif struct {
 	mutex         sync.Mutex
 }
 
-func CreateHif(spi drivers.SPI, cs machine.Pin) Hif {
+func CreateHif(spi drivers.SPI, cs hal.Pin) Hif {
 	return Hif{
 		t: transport{
 			spi: spi,
